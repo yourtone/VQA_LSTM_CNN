@@ -3,6 +3,8 @@ Download the vqa data and preprocessing.
 
 Version: 1.0
 Contributor: Jiasen Lu
+
+Modified by Yuetan Lin (2016/06/17 22:34)
 """
 
 
@@ -60,7 +62,7 @@ def main(params):
             mc_ans = train_ques['questions'][i]['multiple_choices']
 
             train.append({'ques_id': question_id, 'img_path': image_path, 'question': question, 'MC_ans': mc_ans, 'ans': ans})
-        
+
         subtype = 'val2014'
         for i in range(len(val_anno['annotations'])):
             ans = val_anno['annotations'][i]['multiple_choice_answer']
@@ -79,7 +81,7 @@ def main(params):
         train_ques = json.load(open('annotations/MultipleChoice_mscoco_train2014_questions.json', 'r'))
         val_ques = json.load(open('annotations/MultipleChoice_mscoco_val2014_questions.json', 'r'))
         test_ques = json.load(open('annotations/MultipleChoice_mscoco_test2015_questions.json', 'r'))
-        
+
         subtype = 'train2014'
         for i in range(len(train_anno['annotations'])):
             ans = train_anno['annotations'][i]['multiple_choice_answer']
@@ -101,7 +103,7 @@ def main(params):
             mc_ans = val_ques['questions'][i]['multiple_choices']
 
             train.append({'ques_id': question_id, 'img_path': image_path, 'question': question, 'MC_ans': mc_ans, 'ans': ans})
-        
+
         subtype = 'test2015'
         for i in range(len(test_ques['questions'])):
             question_id = test_ques['questions'][i]['question_id']
@@ -114,8 +116,8 @@ def main(params):
 
     print 'Training sample %d, Testing sample %d...' %(len(train), len(test))
 
-    json.dump(train, open('vqa_raw_train.json', 'w'))
-    json.dump(test, open('vqa_raw_test.json', 'w'))
+    json.dump(train, open('vqa_raw_s%d_train.json'%params['split'], 'w'))
+    json.dump(test, open('vqa_raw_s%d_test.json'%params['split'], 'w'))
 
 if __name__ == "__main__":
 
@@ -124,10 +126,9 @@ if __name__ == "__main__":
     # input json
     parser.add_argument('--download', default='False', help='Download and extract data from VQA server')
     parser.add_argument('--split', default=1, type=int, help='1: train on Train and test on Val, 2: train on Train+Val and test on Test')
-  
+
     args = parser.parse_args()
     params = vars(args)
     print 'parsed input parameters:'
     print json.dumps(params, indent = 2)
     main(params)
-

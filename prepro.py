@@ -42,6 +42,7 @@ def prepro_question(imgs, params):
         if i % 1000 == 0:
             sys.stdout.write("processing %d/%d (%.2f%% done)   \r" %  (i, len(imgs), i*100.0/len(imgs)) )
             sys.stdout.flush()   
+    print ""
     return imgs
 
 def build_vocab_question(imgs, params):
@@ -150,7 +151,7 @@ def filter_question(imgs, atoi):
         if atoi.get(img['ans'],len(atoi)+1) != len(atoi)+1:
             new_imgs.append(img)
 
-    print 'question number reduce from %d to %d '%(len(imgs), len(new_imgs))
+    print 'train question number reduce from %d to %d '%(len(imgs), len(new_imgs))
     return new_imgs
 
 def get_unqiue_img(imgs):

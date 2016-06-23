@@ -1,3 +1,4 @@
+-- Modified by Yuetan Lin (2016/06/18 15:41)
 require 'nn'
 require 'optim'
 require 'torch'
@@ -8,7 +9,7 @@ require 'cutorch'
 require 'loadcaffe'
 require 'image'
 require 'hdf5'
-cjson=require('cjson') 
+cjson=require('cjson')
 require 'xlua'
 
 -------------------------------------------------------------------------------
@@ -18,10 +19,13 @@ cmd = torch.CmdLine()
 cmd:text()
 cmd:text('Options')
 cmd:option('-input_json','data_prepro.json','path to the json file containing vocab and answers')
-cmd:option('-image_root','','path to the image root')
+cmd:option('-image_root','data/','path to the image root')
 cmd:option('-cnn_proto', '', 'path to the cnn prototxt')
 cmd:option('-cnn_model', '', 'path to the cnn model')
 cmd:option('-batch_size', 10, 'batch_size')
+
+cmd:option('-layer', 43, 'layer number')
+cmd:option('-dim', 4096, 'image feature dimension')
 
 cmd:option('-out_name', 'data_img.h5', 'output name')
 cmd:option('-gpuid', 1, 'which gpu to use. -1 = use CPU')
@@ -35,6 +39,9 @@ net=loadcaffe.load(opt.cnn_proto, opt.cnn_model,opt.backend);
 net:evaluate()
 net=net:cuda()
 print('#net.modules: ',#net.modules)
+for i=1,#net.modules do
+    print(i,net.modules[i])
+end
 
 function loadim(imname)
     im=image.load(imname)
@@ -72,7 +79,7 @@ for i,imname in pairs(json_file['unique_img_test']) do
     table.insert(test_list, image_root .. imname)
 end
 
-local ndims=4096
+local ndims=opt.dim
 local batch_size = opt.batch_size
 print('DataLoader loading h5 file: ', 'data_train')
 local sz=#train_list
@@ -86,7 +93,7 @@ for i=1,sz,batch_size do
         ims[j]=loadim(train_list[i+j-1]):cuda()
     end
     net:forward(ims)
-    feat_train[{{i,r},{}}]=net.modules[43].output:clone()
+    feat_train[{{i,r},{}}]=net.modules[opt.layer].output:clone()
     collectgarbage()
 end
 xlua.progress(sz, sz)
@@ -96,14 +103,14 @@ local sz=#test_list
 local feat_test=torch.CudaTensor(sz,ndims)
 print(string.format('processing %d images...',sz))
 for i=1,sz,batch_size do
-    xlua.progress(i, sz)    
+    xlua.progress(i, sz)
     r=math.min(sz,i+batch_size-1)
     ims=torch.CudaTensor(r-i+1,3,224,224)
     for j=1,r-i+1 do
         ims[j]=loadim(test_list[i+j-1]):cuda()
     end
     net:forward(ims)
-    feat_test[{{i,r},{}}]=net.modules[43].output:clone()
+    feat_test[{{i,r},{}}]=net.modules[opt.layer].output:clone()
     collectgarbage()
 end
 xlua.progress(sz, sz)

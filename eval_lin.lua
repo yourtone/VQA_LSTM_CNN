@@ -1,3 +1,4 @@
+-- Modified by Yuetan Lin (2016/06/19 08:38)
 require 'nn'
 require 'cutorch'
 require 'cunn'
@@ -23,8 +24,10 @@ cmd:option('-input_ques_h5','data_prepro.h5','path to the h5file containing the 
 cmd:option('-input_json','data_prepro.json','path to the json file containing additional info and vocab')
 cmd:option('-model_path', 'model/lstm.t7', 'path to a model checkpoint to initialize model weights from. Empty = don\'t')
 cmd:option('-out_path', 'result/', 'path to save output json file')
+cmd:option('-result_name', 'MultipleChoice_lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000.json', 'output json file name')
 
 -- Model parameter settings (shoud be the same with the training)
+cmd:option('-imdim',4096,'image feature dimension')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
@@ -58,7 +61,7 @@ local batch_size=opt.batch_size
 local embedding_size_q=opt.input_encoding_size
 local lstm_size_q=opt.rnn_size
 local nlstm_layers_q=opt.rnn_layer
-local nhimage=4096
+local nhimage=opt.imdim
 local common_embedding_size=opt.common_embedding_size
 local noutput=opt.num_output
 local dummy_output_size=1
@@ -94,8 +97,8 @@ dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
 
 -- Normalize the image feature
 if opt.img_norm == 1 then
-	local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),2)) 
-	dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,4096)):float() 
+	local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),2))
+	dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,opt.imdim)):float()
 end
 
 local count = 0
@@ -171,7 +174,7 @@ function dataset:next_batch_test(s,e)
 		qinds[i]=s+i-1;
 		iminds[i]=dataset['img_list'][qinds[i]];
 	end
-	
+
 	local fv_sorted_q=sort_encoding_onehot_right_align(dataset['question']:index(1,qinds),dataset['lengths_q']:index(1,qinds),vocabulary_size_q);
 
 	local fv_im=dataset['fv_im']:index(1,iminds);
@@ -179,12 +182,12 @@ function dataset:next_batch_test(s,e)
 
 	-- ship to gpu
 	if opt.gpuid >= 0 then
-		fv_sorted_q[1]=fv_sorted_q[1]:cuda() 
-		fv_sorted_q[3]=fv_sorted_q[3]:cuda() 
-		fv_sorted_q[4]=fv_sorted_q[4]:cuda() 
+		fv_sorted_q[1]=fv_sorted_q[1]:cuda()
+		fv_sorted_q[3]=fv_sorted_q[3]:cuda()
+		fv_sorted_q[4]=fv_sorted_q[4]:cuda()
 		fv_im = fv_im:cuda()
 	end
-	
+
 	--print(string.format('batch_sort:%f',timer:time().real));
 	return fv_sorted_q,fv_im:cuda(),qids,batch_size;
 end
@@ -205,7 +208,7 @@ function forward(s,e)
 
 	--encoder forward--
 	local states_q,junk2=rnn_forward(encoder_net_buffer_q,torch.repeatTensor(dummy_state_q:fill(0),batch_size,1),word_embedding_q,fv_sorted_q[2]);
-	
+
 	--multimodal/criterion forward--
 	local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4]);
 	local scores=multimodal_net:forward({tv_q,fv_im});
@@ -235,7 +238,7 @@ tmp,pred=torch.max(scores,2);
 function writeAll(file,data)
     local f = io.open(file, "w")
     f:write(data)
-    f:close() 
+    f:close()
 end
 
 function saveJson(fname,t)
@@ -266,4 +269,5 @@ for i=1,nqs do
 	table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
 end
 
-saveJson(opt.out_path .. 'MultipleChoice_mscoco_lstm_results.json',mc_response);
+saveJson(opt.out_path .. opt.result_name, mc_response);
+print('save results in: '..opt.out_path .. opt.result_name)
