@@ -2,8 +2,6 @@
 
 Train a deeper LSTM and normalized CNN Visual Question Answering model. This current code can get **58.16** on Open-Ended and **63.09** on Multiple-Choice on **test-standard** split. You can check [Codalab leaderboard](https://competitions.codalab.org/competitions/6961#results) for more details.
 
-**New VQA Model with better performance and cleaner code can be found here [https://github.com/jiasenlu/HieCoAttenVQA](https://github.com/jiasenlu/HieCoAttenVQA)**
-
 ### My own running examples
 
 preprocess data to raw data
@@ -13,19 +11,28 @@ VQA_LSTM_CNN/data$ python vqa_preprocessing_lin.py --split 1
 Training sample 248349, Testing sample 121512...
 VQA_LSTM_CNN/data$ python vqa_preprocessing_lin.py --split 2
 Training sample 369861, Testing sample 244302...
+VQA_LSTM_CNN/data$ python vqa_preprocessing_lin.py --split 3
+Training sample 369861, Testing sample 60864...
 ```
 
 preprocess raw data into question+answer+vocab files
 
 ```bash
-VQA_LSTM_CNN$ python prepro.py --input_train_json data/vqa_raw_s1_train.json --input_test_json data/vqa_raw_s1_test.json --num_ans 1000 --output_json data_prepro_s1_wct0.json --output_h5 data_prepro_s1_wct0.h5 --word_count_threshold 0
+VQA_LSTM_CNN$ python prepro.py --input_train_json data/vqa_raw_s1_train.json --input_test_json data/vqa_raw_s1_test.json --num_ans 1000 --output_json data_prepro_s1_wct0_o1k.json --output_h5 data_prepro_s1_wct0_o1k.h5 --word_count_threshold 0
 train question number reduce from 248349 to 215375
 total words: 1537357
 number of bad words: 0/12603 = 0.00%
 number of words in vocab would be 12603
 number of UNKs: 0/1537357 = 0.00%
 
-VQA_LSTM_CNN$ python prepro.py --input_train_json data/vqa_raw_s2_train.json --input_test_json data/vqa_raw_s2_test.json --num_ans 1000 --output_json data_prepro_s2_wct0.json --output_h5 data_prepro_s2_wct0.h5 --word_count_threshold 0
+VQA_LSTM_CNN$ python prepro.py --input_train_json data/vqa_raw_s2_train.json --input_test_json data/vqa_raw_s2_test.json --num_ans 1000 --output_json data_prepro_s2_wct0_o1k.json --output_h5 data_prepro_s2_wct0_o1k.h5 --word_count_threshold 0
+train question number reduce from 369861 to 320029
+total words: 2284620
+number of bad words: 0/14770 = 0.00%
+number of words in vocab would be 14770
+number of UNKs: 0/2284620 = 0.00%
+
+VQA_LSTM_CNN$ python prepro.py --input_train_json data/vqa_raw_s3_train.json --input_test_json data/vqa_raw_s3_test.json --num_ans 1000 --output_json data_prepro_s3_wct0_o1k.json --output_h5 data_prepro_s3_wct0_o1k.h5 --word_count_threshold 0
 train question number reduce from 369861 to 320029
 total words: 2284620
 number of bad words: 0/14770 = 0.00%
@@ -33,73 +40,103 @@ number of words in vocab would be 14770
 number of UNKs: 0/2284620 = 0.00%
 ```
 
-generate image features using VGG19 caffe model
+generate image features using VGG19/GoogLeNet caffe model
 
 ```bash
-VQA_LSTM_CNN$ th prepro_img_lin.lua -input_json data_prepro_s1_wct0.json -image_root data/ -cnn_proto /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers_deploy.prototxt -cnn_model /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers.caffemodel -out_name data_img_s1_VGG19_l43_d4096.h5 -layer 43 -dim 4096
+VQA_LSTM_CNN$ th prepro_img_lin.lua -input_json data_prepro_s1_wct0_o1k.json -image_root data/ -cnn_proto /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers_deploy.prototxt -cnn_model /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers.caffemodel -out_name data_img_s1_VGG19_l43_d4096_o1k.h5 -layer 43 -dim 4096
 DataLoader loading h5 file:     data_train
 processing 82460 images...
 DataLoader loading h5 file:     data_test
 processing 40504 images...
 
-VQA_LSTM_CNN$ th prepro_img_lin.lua -input_json data_prepro_s2_wct0.json -image_root data/ -cnn_proto /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers_deploy.prototxt -cnn_model /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers.caffemodel -out_name data_img_s2_VGG19_l43_d4096.h5 -layer 43 -dim 4096
+VQA_LSTM_CNN$ th prepro_img_lin.lua -input_json data_prepro_s2_wct0_o1k.json -image_root data/ -cnn_proto /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers_deploy.prototxt -cnn_model /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers.caffemodel -out_name data_img_s2_VGG19_l43_d4096_o1k.h5 -layer 43 -dim 4096
 DataLoader loading h5 file:     data_train
 processing 122805 images...
 DataLoader loading h5 file:     data_test
 processing 81434 images...
 
-VQA_LSTM_CNN$ th prepro_img_lin_Goo.lua -input_npy_train data/s1_GoogLeNet_1024_train.npy -input_npy_test data/s1_GoogLeNet_1024_test.npy -out_name data_img_s1_GoogLeNet_l151_d1024.h5
-Train feature size:
- 82460
-  1024
+VQA_LSTM_CNN$ th prepro_img_lin_Goo.lua -input_json data_prepro_s1_wct0_o1k.json -split 1 -dim 1000 -input_npy_trainval /home/deepnet/lyt/vqa/feature/VQA/VQA-GoogLeNet-1000.npy -input_npy_test /home/deepnet/lyt/vqa/feature/VQA/VQA-test2015-GoogLeNet-1000.npy -im_path_trainval /home/deepnet/lyt/vqa/feature/VQA/trainval_im_paths.txt -im_path_test /home/deepnet/lyt/vqa/feature/VQA/test_im_paths.txt -out_name data_img_s1_GoogLeNet_d1000_o1k.h5
+TrainVal feature size:
+ 123287x1000
 Test feature size:
- 40504
-  1024
-save image feature to: data_img_s1_GoogLeNet_l151_d1024.h5
+ 123287x1000
+actual processing 82460 train image features...
+actual processing 40504 test image features...
 
-VQA_LSTM_CNN$ th prepro_img_lin_Goo.lua -input_npy_train data/s2_GoogLeNet_1024_train.npy -input_npy_test data/s2_GoogLeNet_1024_test.npy -out_name data_img_s2_GoogLeNet_l151_d1024.h5
-Train feature size:
- 122805
-   1024
+VQA_LSTM_CNN$ th prepro_img_lin_Goo.lua -input_json data_prepro_s2_wct0_o1k.json -split 2 -dim 1000 -input_npy_trainval /home/deepnet/lyt/vqa/feature/VQA/VQA-GoogLeNet-1000.npy -input_npy_test /home/deepnet/lyt/vqa/feature/VQA/VQA-test2015-GoogLeNet-1000.npy -im_path_trainval /home/deepnet/lyt/vqa/feature/VQA/trainval_im_paths.txt -im_path_test /home/deepnet/lyt/vqa/feature/VQA/test_im_paths.txt -out_name data_img_s2_GoogLeNet_d1000_o1k.h5
+TrainVal feature size:
+ 123287x1000
 Test feature size:
- 81434
-  1024
-save image feature to: data_img_s2_GoogLeNet_l151_d1024.h5
+ 81434x1000
+actual processing 122805 train image features...
+actual processing 81434 test image features...
+
+VQA_LSTM_CNN$ th prepro_img_lin_Goo.lua -input_json data_prepro_s3_wct0_o1k.json -split 3 -dim 1000 -input_npy_trainval /home/deepnet/lyt/vqa/feature/VQA/VQA-GoogLeNet-1000.npy -input_npy_test /home/deepnet/lyt/vqa/feature/VQA/VQA-test2015-GoogLeNet-1000.npy -im_path_trainval /home/deepnet/lyt/vqa/feature/VQA/trainval_im_paths.txt -im_path_test /home/deepnet/lyt/vqa/feature/VQA/test_im_paths.txt -out_name data_img_s3_GoogLeNet_d1000_o1k.h5
+TrainVal feature size:
+ 123287x1000
+Test feature size:
+ 81434x1000
+actual processing 122805 train image features...
+actual processing 20288 test image features...
+
+VQA_LSTM_CNN$ th prepro_img_lin_Goo.lua -input_json data_prepro_s1_wct0_o1k.json -split 1 -dim 1024 -input_npy_trainval /home/deepnet/lyt/vqa/feature/VQA/VQA-GoogLeNet-1024.npy -input_npy_test /home/deepnet/lyt/vqa/feature/VQA/VQA-test2015-GoogLeNet-1024.npy -im_path_trainval /home/deepnet/lyt/vqa/feature/VQA/trainval_im_paths.txt -im_path_test /home/deepnet/lyt/vqa/feature/VQA/test_im_paths.txt -out_name data_img_s1_GoogLeNet_d1024_o1k.h5
+TrainVal feature size:
+ 123287x1024
+Test feature size:
+ 123287x1024
+actual processing 82460 train image features...
+actual processing 40504 test image features...
+
+VQA_LSTM_CNN$ th prepro_img_lin_Goo.lua -input_json data_prepro_s2_wct0_o1k.json -split 2 -dim 1024 -input_npy_trainval /home/deepnet/lyt/vqa/feature/VQA/VQA-GoogLeNet-1024.npy -input_npy_test /home/deepnet/lyt/vqa/feature/VQA/VQA-test2015-GoogLeNet-1024.npy -im_path_trainval /home/deepnet/lyt/vqa/feature/VQA/trainval_im_paths.txt -im_path_test /home/deepnet/lyt/vqa/feature/VQA/test_im_paths.txt -out_name data_img_s2_GoogLeNet_d1024_o1k.h5
+TrainVal feature size:
+ 123287x1024
+Test feature size:
+ 81434x1024
+actual processing 122805 train image features...
+actual processing 81434 test image features...
+
+VQA_LSTM_CNN$ th prepro_img_lin_Goo.lua -input_json data_prepro_s3_wct0_o1k.json -split 3 -dim 1024 -input_npy_trainval /home/deepnet/lyt/vqa/feature/VQA/VQA-GoogLeNet-1024.npy -input_npy_test /home/deepnet/lyt/vqa/feature/VQA/VQA-test2015-GoogLeNet-1024.npy -im_path_trainval /home/deepnet/lyt/vqa/feature/VQA/trainval_im_paths.txt -im_path_test /home/deepnet/lyt/vqa/feature/VQA/test_im_paths.txt -out_name data_img_s3_GoogLeNet_d1024_o1k.h5
+TrainVal feature size:
+ 123287x1024
+Test feature size:
+ 81434x1024
+actual processing 122805 train image features...
+actual processing 20288 test image features...
 ```
 
 train
 
 ```bash
-VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s1_VGG19_l43_d4096.h5 -input_ques_h5 data_prepro_s1_wct0.h5 -input_json data_prepro_s1_wct0.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000_iter%d.t7 -final_model_name lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000.t7
-DataLoader loading h5 file:     data_prepro_s1_wct0.h5
-DataLoader loading h5 file:     data_img_s1_VGG19_l43_d4096.h5
+VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s1_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7
+DataLoader loading h5 file:     data_prepro_s1_wct0_o1k.h5
+DataLoader loading h5 file:     data_img_s1_VGG19_l43_d4096_o1k.h5
 training loss: 3.4978640579125  on iter: 100/150000
 training loss: 3.0087427720755  on iter: 200/150000
 ...
 training loss: 0.61157252263555 on iter: 149900/150000
 training loss: 0.61423083797963 on iter: 150000/150000
 
-VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s2_VGG19_l43_d4096.h5 -input_ques_h5 data_prepro_s2_wct0.h5 -input_json data_prepro_s2_wct0.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000_iter%d.t7 -final_model_name lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000.t7
-DataLoader loading h5 file:     data_prepro_s2_wct0.h5
-DataLoader loading h5 file:     data_img_s2_VGG19_l43_d4096.h5
+VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s2_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7
+DataLoader loading h5 file:     data_prepro_s2_wct0_o1k.h5
+DataLoader loading h5 file:     data_img_s2_VGG19_l43_d4096_o1k.h5
 training loss: 3.5151785346515  on iter: 100/150000
 training loss: 3.1159727730167  on iter: 200/150000
 ...
 training loss: 0.81721770791108 on iter: 149900/150000
 training loss: 0.80389374022118 on iter: 150000/150000
 
-VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s1_GoogLeNet_l151_d1024.h5 -imdim 1024 -input_ques_h5 data_prepro_s1_wct0.h5 -input_json data_prepro_s1_wct0.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000_iter%d.t7 -final_model_name lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000.t7
-DataLoader loading h5 file:     data_prepro_s1_wct0.h5
-DataLoader loading h5 file:     data_img_s1_GoogLeNet_l151_d1024.h5
+VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s1_GoogLeNet_l151_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k.t7
+DataLoader loading h5 file:     data_prepro_s1_wct0_o1k.h5
+DataLoader loading h5 file:     data_img_s1_GoogLeNet_l151_d1024_o1k.h5
 training loss: 3.5614427476161  on iter: 100/150000
 training loss: 3.1376313793626  on iter: 200/150000
 ...
 training loss: 0.74972610882572 on iter: 149900/150000
 training loss: 0.75323544082434 on iter: 150000/150000
 
-VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s2_GoogLeNet_l151_d1024.h5 -imdim 1024 -input_ques_h5 data_prepro_s2_wct0.h5 -input_json data_prepro_s2_wct0.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000_iter%d.t7 -final_model_name lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000.t7
-DataLoader loading h5 file:     data_prepro_s2_wct0.h5
-DataLoader loading h5 file:     data_img_s2_GoogLeNet_l151_d1024.h5
+VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s2_GoogLeNet_l151_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k.t7
+DataLoader loading h5 file:     data_prepro_s2_wct0_o1k.h5
+DataLoader loading h5 file:     data_img_s2_GoogLeNet_l151_d1024_o1k.h5
 training loss: 3.6587935287522  on iter: 100/150000
 training loss: 3.4186223243636  on iter: 200/150000
 ...
@@ -110,30 +147,30 @@ training loss: 0.93460241173485 on iter: 150000/150000
 evaluation
 
 ```bash
-VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_VGG19_l43_d4096.h5 -input_ques_h5 data_prepro_s1_wct0.h5 -input_json data_prepro_s1_wct0.json -model_path model/lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000_results.json
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -model_path model/lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
  [====================================== 121512/121512 ===========================>]  Tot: 16s759ms | Step: 0ms
-save results in: result/MultipleChoice_lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000_results.json
+save results in: result/MultipleChoice_lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
 
-VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s2_VGG19_l43_d4096.h5 -input_ques_h5 data_prepro_s2_wct0.h5 -input_json data_prepro_s2_wct0.json -model_path model/lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000_results.json
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s2_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -model_path model/lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
  [====================================== 244302/244302 ===========================>]  Tot: 36s64ms | Step: 0ms
-save results in: result/MultipleChoice_lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000_results.json
+save results in: result/MultipleChoice_lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
 
-VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_GoogLeNet_l151_d1024.h5 -imdim 1024 -input_ques_h5 data_prepro_s1_wct0.h5 -input_json data_prepro_s1_wct0.json -model_path model/lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000_results.json
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_GoogLeNet_l151_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -model_path model/lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
  [====================================== 121512/121512 ===========================>]  Tot: 15s935ms | Step: 0ms
-save results in: result/MultipleChoice_lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000_results.json
+save results in: result/MultipleChoice_lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
 
-VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s2_GoogLeNet_l151_d1024.h5 -imdim 1024 -input_ques_h5 data_prepro_s2_wct0.h5 -input_json data_prepro_s2_wct0.json -model_path model/lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000_results.json
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s2_GoogLeNet_l151_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -model_path model/lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
  [====================================== 244302/244302 ===========================>]  Tot: 34s545ms | Step: 0ms
-save results in: result/MultipleChoice_lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000_results.json
+save results in: result/MultipleChoice_lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
 ```
 
 Score
 
 ```bash
-VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType val2014 --intermediateType s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000 --resultType lstm
+VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType val2014 --intermediateType s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k --resultType lstm
 Overall Accuracy is: 59.30
 
-VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType val2014 --intermediateType s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1000 --resultType lstm
+VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType val2014 --intermediateType s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k --resultType lstm
 Overall Accuracy is: 59.31
 ```
 

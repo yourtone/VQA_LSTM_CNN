@@ -119,4 +119,3 @@ local train_h5_file = hdf5.open(opt.out_name, 'w')
 train_h5_file:write('/images_train', feat_train:float())
 train_h5_file:write('/images_test', feat_test:float())
 train_h5_file:close()
-
