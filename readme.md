@@ -55,6 +55,12 @@ processing 122805 images...
 DataLoader loading h5 file:     data_test
 processing 81434 images...
 
+VQA_LSTM_CNN$ th prepro_img_lin.lua -input_json data_prepro_s3_wct0_o1k.json -image_root data/ -cnn_proto /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers_deploy.prototxt -cnn_model /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers.caffemodel -out_name data_img_s3_VGG19_l43_d4096_o1k.h5 -layer 43 -dim 4096
+DataLoader loading h5 file:     data_train
+processing 122805 images...
+DataLoader loading h5 file:     data_test
+processing 20288 images...
+
 VQA_LSTM_CNN$ th prepro_img_lin_Goo.lua -input_json data_prepro_s1_wct0_o1k.json -split 1 -dim 1000 -input_npy_trainval /home/deepnet/lyt/vqa/feature/VQA/VQA-GoogLeNet-1000.npy -input_npy_test /home/deepnet/lyt/vqa/feature/VQA/VQA-test2015-GoogLeNet-1000.npy -im_path_trainval /home/deepnet/lyt/vqa/feature/VQA/trainval_im_paths.txt -im_path_test /home/deepnet/lyt/vqa/feature/VQA/test_im_paths.txt -out_name data_img_s1_GoogLeNet_d1000_o1k.h5
 TrainVal feature size:
  123287x1000
@@ -125,6 +131,15 @@ training loss: 3.1159727730167  on iter: 200/150000
 training loss: 0.81721770791108 on iter: 149900/150000
 training loss: 0.80389374022118 on iter: 150000/150000
 
+VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s3_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s3_wct0_o1k.h5 -input_json data_prepro_s3_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s3_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s3_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7
+DataLoader loading h5 file:     data_prepro_s3_wct0_o1k.h5
+DataLoader loading h5 file:     data_img_s3_VGG19_l43_d4096_o1k.h5
+training loss: 3.5151785346515  on iter: 100/150000
+training loss: 3.1159727730167  on iter: 200/150000
+...
+training loss: 0.81721770791108 on iter: 149900/150000
+training loss: 0.80389374022118 on iter: 150000/150000
+
 VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s1_GoogLeNet_l151_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k.t7
 DataLoader loading h5 file:     data_prepro_s1_wct0_o1k.h5
 DataLoader loading h5 file:     data_img_s1_GoogLeNet_l151_d1024_o1k.h5
@@ -142,26 +157,49 @@ training loss: 3.4186223243636  on iter: 200/150000
 ...
 training loss: 0.93752728053637 on iter: 149900/150000
 training loss: 0.93460241173485 on iter: 150000/150000
+
+VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s3_GoogLeNet_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s3_wct0_o1k.h5 -input_json data_prepro_s3_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s3_wct0_GoogLeNet_d1024_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s3_wct0_GoogLeNet_d1024_es200_rs512_rl2_cs1024_o1k.t7
+DataLoader loading h5 file:     data_prepro_s3_wct0_o1k.h5
+DataLoader loading h5 file:     data_img_s3_GoogLeNet_d1024_o1k.h5
+training loss: 3.6587935287522  on iter: 100/150000
+training loss: 3.4186223243636  on iter: 200/150000
+...
+training loss: 0.93752728053637 on iter: 149900/150000
+training loss: 0.93460241173485 on iter: 150000/150000
 ```
 
 evaluation
 
 ```bash
-VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -model_path model/lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -model_path model/lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
  [====================================== 121512/121512 ===========================>]  Tot: 16s759ms | Step: 0ms
+save results in: result/OpenEnded_lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
 save results in: result/MultipleChoice_lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
 
-VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s2_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -model_path model/lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s2_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -model_path model/lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
  [====================================== 244302/244302 ===========================>]  Tot: 36s64ms | Step: 0ms
+save results in: result/OpenEnded_lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
 save results in: result/MultipleChoice_lstm_s2_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
 
-VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_GoogLeNet_l151_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -model_path model/lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s3_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s3_wct0_o1k.h5 -input_json data_prepro_s3_wct0_o1k.json -model_path model/lstm_s3_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s3_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
+ [====================================== 60864/60864 ===========================>]  Tot: 9s754ms | Step: 0ms
+save results in: result/OpenEnded_lstm_s3_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
+save results in: result/MultipleChoice_lstm_s3_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
+
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_GoogLeNet_l151_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -model_path model/lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
  [====================================== 121512/121512 ===========================>]  Tot: 15s935ms | Step: 0ms
+save results in: result/OpenEnded_lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
 save results in: result/MultipleChoice_lstm_s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
 
-VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s2_GoogLeNet_l151_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -model_path model/lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name MultipleChoice_lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s2_GoogLeNet_l151_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -model_path model/lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
  [====================================== 244302/244302 ===========================>]  Tot: 34s545ms | Step: 0ms
+save results in: result/OpenEnded_lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
 save results in: result/MultipleChoice_lstm_s2_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k_results.json
+
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s3_GoogLeNet_d1024_o1k.h5 -imdim 1024 -input_ques_h5 data_prepro_s3_wct0_o1k.h5 -input_json data_prepro_s3_wct0_o1k.json -model_path model/lstm_s3_wct0_GoogLeNet_d1024_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s3_wct0_GoogLeNet_d1024_es200_rs512_rl2_cs1024_o1k_results.json
+ [====================================== 60864/60864 ===========================>]  Tot: 8s968ms | Step: 0ms
+save results in: result/OpenEnded_lstm_s3_wct0_GoogLeNet_d1024_es200_rs512_rl2_cs1024_o1k_results.json
+save results in: result/MultipleChoice_lstm_s3_wct0_GoogLeNet_d1024_es200_rs512_rl2_cs1024_o1k_results.json
 ```
 
 Score

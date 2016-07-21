@@ -24,7 +24,7 @@ cmd:option('-input_ques_h5','data_prepro.h5','path to the h5file containing the 
 cmd:option('-input_json','data_prepro.json','path to the json file containing additional info and vocab')
 cmd:option('-model_path', 'model/lstm.t7', 'path to a model checkpoint to initialize model weights from. Empty = don\'t')
 cmd:option('-out_path', 'result/', 'path to save output json file')
-cmd:option('-result_name', 'MultipleChoice_lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000.json', 'output json file name')
+cmd:option('-result_name', 'lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000.json', 'output json file name')
 
 -- Model parameter settings (shoud be the same with the training)
 cmd:option('-imdim',4096,'image feature dimension')
@@ -251,7 +251,8 @@ for i=1,nqs do
 end
 
 paths.mkdir(opt.out_path)
-saveJson(opt.out_path .. 'OpenEnded_mscoco_lstm_results.json',response);
+saveJson(opt.out_path .. 'OpenEnded_' .. opt.result_name,response);
+print('save results in: '..opt.out_path .. 'OpenEnded_' .. opt.result_name)
 
 mc_response={};
 
@@ -269,5 +270,5 @@ for i=1,nqs do
 	table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
 end
 
-saveJson(opt.out_path .. opt.result_name, mc_response);
-print('save results in: '..opt.out_path .. opt.result_name)
+saveJson(opt.out_path .. 'MultipleChoice_' .. opt.result_name, mc_response);
+print('save results in: '..opt.out_path .. 'MultipleChoice_' .. opt.result_name)
