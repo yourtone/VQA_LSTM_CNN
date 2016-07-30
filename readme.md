@@ -166,6 +166,33 @@ training loss: 3.4186223243636  on iter: 200/150000
 ...
 training loss: 0.93752728053637 on iter: 149900/150000
 training loss: 0.93460241173485 on iter: 150000/150000
+
+VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s1_GoogLeNet_d1000_o1k.h5 -imdim 1000 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s1_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s1_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k.t7
+DataLoader loading h5 file:     data_prepro_s1_wct0_o1k.h5
+DataLoader loading h5 file:     data_img_s1_GoogLeNet_d1000_o1k.h5
+training loss: 3.596404076814   on iter: 100/150000
+training loss: 3.1758265550601  on iter: 200/150000
+...
+training loss: 0.77804907491316 on iter: 149900/150000
+training loss: 0.77817997602014 on iter: 150000/150000
+
+VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s2_GoogLeNet_d1000_o1k.h5 -imdim 1000 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s2_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s2_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k.t7
+DataLoader loading h5 file:     data_prepro_s2_wct0_o1k.h5
+DataLoader loading h5 file:     data_img_s2_GoogLeNet_d1000_o1k.h5
+training loss: 3.5959485306648  on iter: 100/150000
+training loss: 3.281319634216   on iter: 200/150000
+...
+training loss: 0.93689886374299 on iter: 149900/150000
+training loss: 0.9203415711874  on iter: 150000/150000
+
+VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s3_GoogLeNet_d1000_o1k.h5 -imdim 1000 -input_ques_h5 data_prepro_s3_wct0_o1k.h5 -input_json data_prepro_s3_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s3_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s3_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k.t7
+DataLoader loading h5 file:     data_prepro_s3_wct0_o1k.h5
+DataLoader loading h5 file:     data_img_s3_GoogLeNet_d1000_o1k.h5
+training loss: 3.5959485306648  on iter: 100/150000
+training loss: 3.281319634216   on iter: 200/150000
+...
+training loss: 0.93689886374299 on iter: 149900/150000
+training loss: 0.9203415711874  on iter: 150000/150000
 ```
 
 evaluation
@@ -200,6 +227,21 @@ VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s3_GoogLeNet_d1024_o1k.h5 -
  [====================================== 60864/60864 ===========================>]  Tot: 8s968ms | Step: 0ms
 save results in: result/OpenEnded_lstm_s3_wct0_GoogLeNet_d1024_es200_rs512_rl2_cs1024_o1k_results.json
 save results in: result/MultipleChoice_lstm_s3_wct0_GoogLeNet_d1024_es200_rs512_rl2_cs1024_o1k_results.json
+
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_GoogLeNet_d1000_o1k.h5 -imdim 1000 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -model_path model/lstm_s1_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s1_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
+ [====================================== 121512/121512 ===========================>]  Tot: 16s76ms | Step: 0ms
+save results in: result/OpenEnded_lstm_s1_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
+save results in: result/MultipleChoice_lstm_s1_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
+
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s2_GoogLeNet_d1000_o1k.h5 -imdim 1000 -input_ques_h5 data_prepro_s2_wct0_o1k.h5 -input_json data_prepro_s2_wct0_o1k.json -model_path model/lstm_s2_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s2_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
+ [====================================== 244302/244302 ===========================>]  Tot: 36s524ms | Step: 0ms
+save results in: result/OpenEnded_lstm_s2_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
+save results in: result/MultipleChoice_lstm_s2_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
+
+VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s3_GoogLeNet_d1000_o1k.h5 -imdim 1000 -input_ques_h5 data_prepro_s3_wct0_o1k.h5 -input_json data_prepro_s3_wct0_o1k.json -model_path model/lstm_s3_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k.t7 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s3_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
+ [====================================== 60864/60864 ===========================>]  Tot: 8s913ms | Step: 0ms
+save results in: result/OpenEnded_lstm_s3_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
+save results in: result/MultipleChoice_lstm_s3_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
 ```
 
 Score
@@ -210,6 +252,9 @@ Overall Accuracy is: 59.30
 
 VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType val2014 --intermediateType s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k --resultType lstm
 Overall Accuracy is: 59.31
+
+VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType val2014 --intermediateType s1_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k --resultType lstm
+Overall Accuracy is: 59.01
 ```
 
 ### Requirements

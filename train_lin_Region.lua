@@ -30,6 +30,7 @@ cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
 cmd:option('-imdim',4096,'image feature dimension')
+cmd:option('-num_region',196,'number of image regions')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-max_iters', 150000, 'max number of iterations to run for ')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
@@ -109,8 +110,8 @@ dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
 
 -- Normalize the image feature
 if opt.img_norm == 1 then
-	local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),2))
-	dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,opt.imdim)):float()
+  local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),2))
+  dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,opt.imdim)):float()
 end
 
 local count = 0
@@ -130,9 +131,9 @@ buffer_size_q=dataset['question']:size()[2]
 --VQA
 --embedding: word-embedding
 embedding_net_q=nn.Sequential()
-				:add(nn.Linear(vocabulary_size_q,embedding_size_q))
-				:add(nn.Dropout(0.5))
-				:add(nn.Tanh())
+        :add(nn.Linear(vocabulary_size_q,embedding_size_q))
+        :add(nn.Dropout(0.5))
+        :add(nn.Tanh())
 
 --encoder: RNN body
 encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_size,nlstm_layers_q,0.5)
@@ -140,9 +141,9 @@ encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_s
 --MULTIMODAL
 --multimodal way of combining different spaces
 multimodal_net=nn.Sequential()
-				:add(netdef.AxB(2*lstm_size_q*nlstm_layers_q,nhimage,common_embedding_size,0.5))
-				:add(nn.Dropout(0.5))
-				:add(nn.Linear(common_embedding_size,noutput))
+        :add(netdef.AxBB(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+        :add(nn.Dropout(0.5))
+        :add(nn.Linear(common_embedding_size,noutput))
 
 --criterion
 criterion=nn.CrossEntropyCriterion()
@@ -152,13 +153,13 @@ dummy_state_q=torch.Tensor(lstm_size_q*nlstm_layers_q*2):fill(0)
 dummy_output_q=torch.Tensor(dummy_output_size):fill(0)
 
 if opt.gpuid >= 0 then
-	print('shipped data function to cuda...')
-	embedding_net_q = embedding_net_q:cuda()
-	encoder_net_q = encoder_net_q:cuda()
-	multimodal_net = multimodal_net:cuda()
-	criterion = criterion:cuda()
-	dummy_state_q = dummy_state_q:cuda()
-	dummy_output_q = dummy_output_q:cuda()
+  print('shipped data function to cuda...')
+  embedding_net_q = embedding_net_q:cuda()
+  encoder_net_q = encoder_net_q:cuda()
+  multimodal_net = multimodal_net:cuda()
+  criterion = criterion:cuda()
+  dummy_state_q = dummy_state_q:cuda()
+  dummy_output_q = dummy_output_q:cuda()
 end
 
 --Processings
@@ -188,32 +189,32 @@ optimize.winit=join_vector({encoder_w_q,embedding_w_q,multimodal_w})
 ------------------------------------------------------------------------
 function dataset:next_batch()
 
-	local qinds=torch.LongTensor(batch_size):fill(0)
-	local iminds=torch.LongTensor(batch_size):fill(0)
+  local qinds=torch.LongTensor(batch_size):fill(0)
+  local iminds=torch.LongTensor(batch_size):fill(0)
 
-	local nqs=dataset['question']:size(1)
-	-- we use the last val_num data for validation (the data already randomlized when created)
+  local nqs=dataset['question']:size(1)
+  -- we use the last val_num data for validation (the data already randomlized when created)
 
-	for i=1,batch_size do
-		qinds[i]=torch.random(nqs)
-		iminds[i]=dataset['img_list'][qinds[i]]
-	end
+  for i=1,batch_size do
+    qinds[i]=torch.random(nqs)
+    iminds[i]=dataset['img_list'][qinds[i]]
+  end
 
 
-	local fv_sorted_q=sort_encoding_onehot_right_align(dataset['question']:index(1,qinds),dataset['lengths_q']:index(1,qinds),vocabulary_size_q)
-	local fv_im=dataset['fv_im']:index(1,iminds)
-	local labels=dataset['answers']:index(1,qinds)
+  local fv_sorted_q=sort_encoding_onehot_right_align(dataset['question']:index(1,qinds),dataset['lengths_q']:index(1,qinds),vocabulary_size_q)
+  local fv_im=dataset['fv_im']:index(1,iminds)
+  local labels=dataset['answers']:index(1,qinds)
 
-	-- ship to gpu
-	if opt.gpuid >= 0 then
-		fv_sorted_q[1]=fv_sorted_q[1]:cuda()
-		fv_sorted_q[3]=fv_sorted_q[3]:cuda()
-		fv_sorted_q[4]=fv_sorted_q[4]:cuda()
-		fv_im = fv_im:cuda()
-		labels = labels:cuda()
-	end
+  -- ship to gpu
+  if opt.gpuid >= 0 then
+    fv_sorted_q[1]=fv_sorted_q[1]:cuda()
+    fv_sorted_q[3]=fv_sorted_q[3]:cuda()
+    fv_sorted_q[4]=fv_sorted_q[4]:cuda()
+    fv_im = fv_im:cuda()
+    labels = labels:cuda()
+  end
 
-	return fv_sorted_q, fv_im, labels, batch_size
+  return fv_sorted_q, fv_im, labels, batch_size
 end
 
 ------------------------------------------------------------------------
@@ -225,68 +226,68 @@ local encoder_net_buffer_q=dupe_rnn(encoder_net_q,buffer_size_q)
 
 -- Objective function
 function JdJ(x)
-	local params=split_vector(x,sizes)
-	--load x to net parameters--
-	if encoder_w_q~=params[1] then
-		encoder_w_q:copy(params[1])
-		for i=1,buffer_size_q do
-			encoder_net_buffer_q[2][i]:copy(params[1])
-		end
-	end
-	if embedding_w_q~=params[2] then
-		embedding_w_q:copy(params[2])
-	end
-	if multimodal_w~=params[3] then
-		multimodal_w:copy(params[3])
-	end
+  local params=split_vector(x,sizes)
+  --load x to net parameters--
+  if encoder_w_q~=params[1] then
+    encoder_w_q:copy(params[1])
+    for i=1,buffer_size_q do
+      encoder_net_buffer_q[2][i]:copy(params[1])
+    end
+  end
+  if embedding_w_q~=params[2] then
+    embedding_w_q:copy(params[2])
+  end
+  if multimodal_w~=params[3] then
+    multimodal_w:copy(params[3])
+  end
 
-	--clear gradients--
-	for i=1,buffer_size_q do
-		encoder_net_buffer_q[3][i]:zero()
-	end
-	embedding_dw_q:zero()
-	multimodal_dw:zero()
+  --clear gradients--
+  for i=1,buffer_size_q do
+    encoder_net_buffer_q[3][i]:zero()
+  end
+  embedding_dw_q:zero()
+  multimodal_dw:zero()
 
-	--grab a batch--
-	local fv_sorted_q,fv_im,labels,batch_size=dataset:next_batch()
-	local question_max_length=fv_sorted_q[2]:size(1)
+  --grab a batch--
+  local fv_sorted_q,fv_im,labels,batch_size=dataset:next_batch()
+  local question_max_length=fv_sorted_q[2]:size(1)
 
-	--embedding forward--
-	local word_embedding_q=split_vector(embedding_net_q:forward(fv_sorted_q[1]),fv_sorted_q[2])
+  --embedding forward--
+  local word_embedding_q=split_vector(embedding_net_q:forward(fv_sorted_q[1]),fv_sorted_q[2])
 
-	--encoder forward--
-	local states_q,junk2=rnn_forward(encoder_net_buffer_q,torch.repeatTensor(dummy_state_q:fill(0),batch_size,1),word_embedding_q,fv_sorted_q[2])
+  --encoder forward--
+  local states_q,junk2=rnn_forward(encoder_net_buffer_q,torch.repeatTensor(dummy_state_q:fill(0),batch_size,1),word_embedding_q,fv_sorted_q[2])
 
-	--multimodal/criterion forward--
-	local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4])
-	local scores=multimodal_net:forward({tv_q,fv_im})
-	local f=criterion:forward(scores,labels)
-	--multimodal/criterion backward--
-	local dscores=criterion:backward(scores,labels)
+  --multimodal/criterion forward--
+  local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4])
+  local scores=multimodal_net:forward({tv_q,fv_im})
+  local f=criterion:forward(scores,labels)
+  --multimodal/criterion backward--
+  local dscores=criterion:backward(scores,labels)
 
-	local tmp=multimodal_net:backward({tv_q,fv_im},dscores)
-	local dtv_q=tmp[1]:index(1,fv_sorted_q[3])
+  local tmp=multimodal_net:backward({tv_q,fv_im},dscores)
+  local dtv_q=tmp[1]:index(1,fv_sorted_q[3])
 
-	--encoder backward
-	local junk4,dword_embedding_q=rnn_backward(encoder_net_buffer_q,dtv_q,dummy_output_q,states_q,word_embedding_q,fv_sorted_q[2])
+  --encoder backward
+  local junk4,dword_embedding_q=rnn_backward(encoder_net_buffer_q,dtv_q,dummy_output_q,states_q,word_embedding_q,fv_sorted_q[2])
 
-	--embedding backward--
-	dword_embedding_q=join_vector(dword_embedding_q)
-	embedding_net_q:backward(fv_sorted_q[1],dword_embedding_q)
+  --embedding backward--
+  dword_embedding_q=join_vector(dword_embedding_q)
+  embedding_net_q:backward(fv_sorted_q[1],dword_embedding_q)
 
-	--summarize f and gradient
-	local encoder_adw_q=encoder_dw_q:clone():zero()
-	for i=1,question_max_length do
-		encoder_adw_q=encoder_adw_q+encoder_net_buffer_q[3][i]
-	end
+  --summarize f and gradient
+  local encoder_adw_q=encoder_dw_q:clone():zero()
+  for i=1,question_max_length do
+    encoder_adw_q=encoder_adw_q+encoder_net_buffer_q[3][i]
+  end
 
-	gradients=join_vector({encoder_adw_q,embedding_dw_q,multimodal_dw})
-	gradients:clamp(-10,10)
-	if running_avg == nil then
-		running_avg = f
-	end
-	running_avg=running_avg*0.95+f*0.05
-	return f,gradients
+  gradients=join_vector({encoder_adw_q,embedding_dw_q,multimodal_dw})
+  gradients:clamp(-10,10)
+  if running_avg == nil then
+    running_avg = f
+  end
+  running_avg=running_avg*0.95+f*0.05
+  return f,gradients
 end
 
 
@@ -297,22 +298,22 @@ end
 
 local state={}
 for iter = 1, opt.max_iters do
-	if iter%opt.save_checkpoint_every == 0 then
-		paths.mkdir(model_path..'save')
-		torch.save(string.format(model_path..'save/'..opt.CP_name,iter),
-			{encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})
-	end
-	if iter%100 == 0 then
-		print('training loss: ' .. running_avg, 'on iter: ' .. iter .. '/' .. opt.max_iters)
-	end
-	optim.rmsprop(JdJ, optimize.winit, optimize, state)
+  if iter%opt.save_checkpoint_every == 0 then
+    paths.mkdir(model_path..'save')
+    torch.save(string.format(model_path..'save/'..opt.CP_name,iter),
+      {encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})
+  end
+  if iter%100 == 0 then
+    print('training loss: ' .. running_avg, 'on iter: ' .. iter .. '/' .. opt.max_iters)
+  end
+  optim.rmsprop(JdJ, optimize.winit, optimize, state)
 
-	optimize.learningRate=optimize.learningRate*decay_factor
-	if iter%50 == 0 then -- change this to smaller value if out of the memory
-		collectgarbage()
-	end
+  optimize.learningRate=optimize.learningRate*decay_factor
+  if iter%50 == 0 then -- change this to smaller value if out of the memory
+    collectgarbage()
+  end
 end
 
 -- Saving the final model
 torch.save(string.format(model_path..opt.final_model_name,i),
-	{encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})
+  {encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})
