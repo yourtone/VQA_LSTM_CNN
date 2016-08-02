@@ -2,8 +2,11 @@
 *.json
 *.npy
 data/test2015/
+data/test2015
 data/train2014/
+data/train2014
 data/val2014/
+data/val2014
 model/
 
 # copy file from https://github.com/github/gitignore/blob/master/Lua.gitignore
