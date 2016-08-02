@@ -85,6 +85,7 @@ paths.mkdir(model_path)
 ------------------------------------------------------------------------
 -- Loading Dataset
 ------------------------------------------------------------------------
+print('DataLoader loading h5 file: ', opt.input_json)
 local file = io.open(opt.input_json, 'r')
 local text = file:read()
 file:close()
@@ -93,13 +94,11 @@ json_file = cjson.decode(text)
 print('DataLoader loading h5 file: ', opt.input_ques_h5)
 local dataset = {}
 local h5_file = hdf5.open(opt.input_ques_h5, 'r')
-
 dataset['question'] = h5_file:read('/ques_train'):all()
 dataset['lengths_q'] = h5_file:read('/ques_length_train'):all()
 dataset['img_list'] = h5_file:read('/img_pos_train'):all()
 dataset['answers'] = h5_file:read('/answers'):all()
 h5_file:close()
-
 
 print('DataLoader loading h5 file: ', opt.input_img_h5)
 local h5_file = hdf5.open(opt.input_img_h5, 'r')
@@ -111,8 +110,10 @@ dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
 -- Normalize the image feature
 if opt.img_norm == 1 then
   local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),3))
+  nm[nm:eq(0)]=1e-5
   dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,1,nhimage)):float()
 end
+assert(torch.sum(dataset['fv_im']:ne(dataset['fv_im']))==0)
 
 local count = 0
 for i, w in pairs(json_file['ix_to_word']) do count = count + 1 end
@@ -315,5 +316,5 @@ for iter = 1, opt.max_iters do
 end
 
 -- Saving the final model
-torch.save(string.format(model_path..opt.final_model_name,i),
+torch.save(string.format(model_path..opt.final_model_name),
   {encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})

@@ -35,7 +35,7 @@ function netdef.AxBB(nhA,nhB,NB,nhcommon,dropout)
     qc=nn.Squeeze(1)(qc)
     local output=nn.Tanh()(nn.CMulTable()({qc,ic}));
     output=nn.Reshape(1,NB,nhcommon)(output)
-    output=nn.SpatialAveragePooling(1,NB)(output)
+    output=nn.SpatialMaxPooling(1,NB)(output)
     output=nn.Squeeze()(output)
     return nn.gModule({q,i},{output});
 end

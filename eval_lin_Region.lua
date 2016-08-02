@@ -28,6 +28,7 @@ cmd:option('-result_name', 'lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_
 
 -- Model parameter settings (shoud be the same with the training)
 cmd:option('-imdim',4096,'image feature dimension')
+cmd:option('-num_region',196,'number of image regions')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
@@ -51,7 +52,6 @@ if opt.gpuid >= 0 then
   if opt.backend == 'cudnn' then require 'cudnn' end
   cutorch.setDevice(opt.gpuid + 1)
 end
-
 
 ------------------------------------------------------------------------
 -- Setting the parameters
@@ -94,9 +94,9 @@ dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
 
 -- Normalize the image feature
 if opt.img_norm == 1 then
-	local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),2))
+	local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),3))
 	nm[nm:eq(0)]=1e-5
-	dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,opt.imdim)):float()
+	dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,1,nhimage)):float()
 end
 assert(torch.sum(dataset['fv_im']:ne(dataset['fv_im']))==0)
 
@@ -121,7 +121,7 @@ encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_s
 --MULTIMODAL
 --multimodal way of combining different spaces
 multimodal_net=nn.Sequential()
-				:add(netdef.AxB(2*lstm_size_q*nlstm_layers_q,nhimage,common_embedding_size,0.5))
+				:add(netdef.AxBB(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
 				:add(nn.Dropout(0.5))
 				:add(nn.Linear(common_embedding_size,noutput))
 
