@@ -4,7 +4,7 @@ Train a deeper LSTM and normalized CNN Visual Question Answering model. This cur
 
 ### My own running examples
 
-preprocess data to raw data
+* preprocess data to raw data :shipit:
 
 ```bash
 VQA_LSTM_CNN/data$ python vqa_preprocessing_lin.py --split 1
@@ -13,9 +13,11 @@ VQA_LSTM_CNN/data$ python vqa_preprocessing_lin.py --split 2
 Training sample 369861, Testing sample 244302...
 VQA_LSTM_CNN/data$ python vqa_preprocessing_lin.py --split 3
 Training sample 369861, Testing sample 60864...
+VQA_LSTM_CNN/data$ python vqa_preprocessing_lin_sub.py --split 1
+Training sample 36390, Testing sample 18179...
 ```
 
-preprocess raw data into question+answer+vocab files
+* preprocess raw data into question+answer+vocab files :shipit:
 
 ```bash
 VQA_LSTM_CNN$ python prepro.py --input_train_json data/vqa_raw_s1_train.json --input_test_json data/vqa_raw_s1_test.json --num_ans 1000 --output_json data_prepro_s1_wct0_o1k.json --output_h5 data_prepro_s1_wct0_o1k.h5 --word_count_threshold 0
@@ -38,9 +40,15 @@ total words: 2284620
 number of bad words: 0/14770 = 0.00%
 number of words in vocab would be 14770
 number of UNKs: 0/2284620 = 0.00%
+
+VQA_LSTM_CNN$ python prepro.py --input_train_json data/vqa_raw_s1_subtrain.json --input_test_json data/vqa_raw_s1_subtest.json --num_ans 1000 --output_json data_prepro_s1_wct0_o1k_sub.json --output_h5 data_prepro_s1_wct0_o1k_sub.h5 --word_count_threshold 0
+total words: 234395
+number of bad words: 0/5444 = 0.00%
+number of words in vocab would be 5444
+number of UNKs: 0/234395 = 0.00%
 ```
 
-generate image features using VGG19/GoogLeNet caffe model
+* generate image features using VGG19/GoogLeNet caffe model :shipit:
 
 ```bash
 VQA_LSTM_CNN$ th prepro_img_lin.lua -input_json data_prepro_s1_wct0_o1k.json -image_root data/ -cnn_proto /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers_deploy.prototxt -cnn_model /home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers.caffemodel -out_name data_img_s1_VGG19_l43_d4096_o1k.h5 -layer 43 -dim 4096
@@ -110,7 +118,7 @@ actual processing 122805 train image features...
 actual processing 20288 test image features...
 ```
 
-train
+* train :shipit:
 
 ```bash
 VQA_LSTM_CNN$ th train_lin.lua -input_img_h5 data_img_s1_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -max_iters 150000 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -checkpoint_path model/ -CP_name lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_iter%d.t7 -final_model_name lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7
@@ -195,7 +203,7 @@ training loss: 0.93689886374299 on iter: 149900/150000
 training loss: 0.9203415711874  on iter: 150000/150000
 ```
 
-evaluation
+* evaluation :shipit:
 
 ```bash
 VQA_LSTM_CNN$ th eval_lin.lua -input_img_h5 data_img_s1_VGG19_l43_d4096_o1k.h5 -input_ques_h5 data_prepro_s1_wct0_o1k.h5 -input_json data_prepro_s1_wct0_o1k.json -model_path model/lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k.t7 -imdim 4096 -input_encoding_size 200 -rnn_size 512 -rnn_layer 2 -common_embedding_size 1024 -num_output 1000 -result_name lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_results.json
@@ -244,17 +252,48 @@ save results in: result/OpenEnded_lstm_s3_wct0_GoogLeNet_d1000_es200_rs512_rl2_c
 save results in: result/MultipleChoice_lstm_s3_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_results.json
 ```
 
-Score
+* Score :shipit:
 
 ```bash
 VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType val2014 --intermediateType s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k --resultType lstm
 Overall Accuracy is: 59.30
+Per Answer Type Accuracy is the following:
+other : 50.19
+number : 34.24
+yes/no : 79.88
 
 VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType val2014 --intermediateType s1_wct0_GoogLeNet_l151_d1024_es200_rs512_rl2_cs1024_o1k --resultType lstm
 Overall Accuracy is: 59.31
+Per Answer Type Accuracy is the following:
+other : 50.27
+number : 34.51
+yes/no : 79.71
 
 VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType val2014 --intermediateType s1_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k --resultType lstm
 Overall Accuracy is: 59.01
+Per Answer Type Accuracy is the following:
+other : 49.67
+number : 34.15
+yes/no : 79.84
+
+VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType subval2014 --intermediateType s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1k_sub --resultType lstm
+Overall Accuracy is: 51.72
+Per Question Type Accuracy is the following:
+what : 38.63
+is this : 70.29
+is there a : 84.33
+what is the : 41.48
+is the : 71.07
+is this a : 74.04
+what kind of : 44.03
+what is : 36.58
+are the : 68.72
+how many : 35.34
+what color is the : 44.40
+Per Answer Type Accuracy is the following:
+other : 42.19
+number : 33.24
+yes/no : 75.33
 ```
 
 ### Requirements
