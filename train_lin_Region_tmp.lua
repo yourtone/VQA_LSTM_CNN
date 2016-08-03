@@ -142,7 +142,14 @@ encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_s
 --MULTIMODAL
 --multimodal way of combining different spaces
 multimodal_net=nn.Sequential()
-        :add(netdef.AxBB(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+        :add(netdef.QxII(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+        :add(nn.Tanh())
+
+-- answer generation
+answer_net=nn.Sequential()
+        :add(nn.Reshape(1,opt.num_region,common_embedding_size))
+        :add(nn.SpatialMaxPooling(1,opt.num_region))
+        :add(nn.Squeeze())
         :add(nn.Dropout(0.5))
         :add(nn.Linear(common_embedding_size,noutput))
 
@@ -158,6 +165,7 @@ if opt.gpuid >= 0 then
   embedding_net_q = embedding_net_q:cuda()
   encoder_net_q = encoder_net_q:cuda()
   multimodal_net = multimodal_net:cuda()
+  answer_net = answer_net:cuda()
   criterion = criterion:cuda()
   dummy_state_q = dummy_state_q:cuda()
   dummy_output_q = dummy_output_q:cuda()
@@ -173,7 +181,10 @@ encoder_w_q:uniform(-0.08, 0.08)
 multimodal_w,multimodal_dw=multimodal_net:getParameters()
 multimodal_w:uniform(-0.08, 0.08)
 
-sizes={encoder_w_q:size(1),embedding_w_q:size(1),multimodal_w:size(1)}
+answer_w,answer_dw=answer_net:getParameters()
+answer_w:uniform(-0.08, 0.08)
+
+sizes={encoder_w_q:size(1),embedding_w_q:size(1),multimodal_w:size(1),answer_w:size(1)}
 
 
 -- optimization parameter
@@ -182,7 +193,7 @@ optimize.maxIter=opt.max_iters
 optimize.learningRate=opt.learning_rate
 optimize.update_grad_per_n_batches=1
 
-optimize.winit=join_vector({encoder_w_q,embedding_w_q,multimodal_w})
+optimize.winit=join_vector({encoder_w_q,embedding_w_q,multimodal_w,answer_w})
 
 
 ------------------------------------------------------------------------
@@ -239,6 +250,9 @@ function JdJ(x)
   if multimodal_w~=params[3] then
     multimodal_w:copy(params[3])
   end
+  if answer_w~=params[4] then
+    answer_w:copy(params[4])
+  end
 
   --clear gradients--
   for i=1,buffer_size_q do
@@ -246,6 +260,7 @@ function JdJ(x)
   end
   embedding_dw_q:zero()
   multimodal_dw:zero()
+  answer_dw:zero()
 
   --grab a batch--
   local fv_sorted_q,fv_im,labels,batch_size=dataset:next_batch()
@@ -259,12 +274,14 @@ function JdJ(x)
 
   --multimodal/criterion forward--
   local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4])
-  local scores=multimodal_net:forward({tv_q,fv_im})
+  local fusion_fea=multimodal_net:forward({tv_q,fv_im})
+  local scores=answer_net:forward(fusion_fea)
   local f=criterion:forward(scores,labels)
   --multimodal/criterion backward--
   local dscores=criterion:backward(scores,labels)
 
-  local tmp=multimodal_net:backward({tv_q,fv_im},dscores)
+  local dfusion_fea=answer_net:backward(fusion_fea,dscores)
+  local tmp=multimodal_net:backward({tv_q,fv_im},dfusion_fea)
   local dtv_q=tmp[1]:index(1,fv_sorted_q[3])
 
   --encoder backward
@@ -280,7 +297,7 @@ function JdJ(x)
     encoder_adw_q=encoder_adw_q+encoder_net_buffer_q[3][i]
   end
 
-  gradients=join_vector({encoder_adw_q,embedding_dw_q,multimodal_dw})
+  gradients=join_vector({encoder_adw_q,embedding_dw_q,multimodal_dw,answer_dw})
   gradients:clamp(-10,10)
   if running_avg == nil then
     running_avg = f
@@ -300,7 +317,7 @@ for iter = 1, opt.max_iters do
   if iter%opt.save_checkpoint_every == 0 then
     paths.mkdir(model_path..'save')
     torch.save(string.format(model_path..'save/'..opt.CP_name,iter),
-      {encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})
+      {encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w,answer_w=answer_w})
   end
   if iter%100 == 0 then
     print('training loss: ' .. running_avg, 'on iter: ' .. iter .. '/' .. opt.max_iters)
@@ -315,4 +332,4 @@ end
 
 -- Saving the final model
 torch.save(string.format(model_path..opt.final_model_name),
-  {encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})
+  {encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w,answer_w=answer_w})
