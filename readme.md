@@ -294,6 +294,44 @@ Per Answer Type Accuracy is the following:
 other : 42.19
 number : 33.24
 yes/no : 75.33
+
+VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType subval2014 --intermediateType s1_wct0_GoogLeNet_d1024_es200_rs512_rl2_cs1024_o1k_sub --resultType lstm
+Overall Accuracy is: 52.24
+Per Question Type Accuracy is the following:
+what : 39.50
+is this : 70.48
+is there a : 85.14
+what is the : 40.81
+is the : 70.51
+is this a : 74.15
+what kind of : 46.42
+what is : 40.24
+are the : 68.88
+how many : 35.43
+what color is the : 45.68
+Per Answer Type Accuracy is the following:
+other : 43.01
+number : 33.54
+yes/no : 75.56
+
+VQA/PythonEvaluationTools$ python vqaEvalDemo_lin.py --taskType MultipleChoice --dataType mscoco --dataSubType subval2014 --intermediateType s1_wct0_GoogLeNet_d1000_es200_rs512_rl2_cs1024_o1k_sub --resultType lstm
+Overall Accuracy is: 51.55
+Per Question Type Accuracy is the following:
+what : 37.98
+is this : 70.40
+is there a : 85.87
+what is the : 40.36
+is the : 70.20
+is this a : 73.49
+what kind of : 45.37
+what is : 39.04
+are the : 69.87
+how many : 34.71
+what color is the : 44.22
+Per Answer Type Accuracy is the following:
+other : 42.02
+number : 32.88
+yes/no : 75.28
 ```
 
 ### Requirements
