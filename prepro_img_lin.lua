@@ -97,6 +97,11 @@ for i=1,sz,batch_size do
     collectgarbage()
 end
 xlua.progress(sz, sz)
+local train_h5_file = hdf5.open(opt.out_name, 'w')
+train_h5_file:write('/images_train', feat_train:float())
+train_h5_file:close()
+feat_train = nil
+collectgarbage()
 
 print('DataLoader loading h5 file: ', 'data_test')
 local sz=#test_list
@@ -115,7 +120,7 @@ for i=1,sz,batch_size do
 end
 xlua.progress(sz, sz)
 
-local train_h5_file = hdf5.open(opt.out_name, 'w')
-train_h5_file:write('/images_train', feat_train:float())
+local train_h5_file = hdf5.open(opt.out_name, 'a')
+--train_h5_file:write('/images_train', feat_train:float())
 train_h5_file:write('/images_test', feat_test:float())
 train_h5_file:close()
