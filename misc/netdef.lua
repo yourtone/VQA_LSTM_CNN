@@ -52,4 +52,16 @@ function netdef.QxII(nhA,nhB,NB,nhcommon,dropout)
     return nn.gModule({q,i},{output});
 end
 
+
+function netdef.Qx2DII(nhA, nhB, hB, wB, nhcommon, dropout)
+    dropout = dropout or 0
+    local q = nn.Identity()();
+    local i = nn.Identity()();
+    local qc = nn.Tanh()(nn.Linear(nhA, nhcommon)(nn.Dropout(dropout)(q)));
+    local ic = nn.Tanh()(nn.SpatialConvolution(nhB, nhcommon, 1, 1)(nn.Dropout(dropout)(i)));
+    qc = nn.Reshape(nhcommon, hB, wB)(nn.Replicate(hB*wB, 3, 1)(qc))
+    local output = nn.CMulTable()({qc, ic})
+    return nn.gModule({q, i}, {output})
+end
+
 return netdef;
