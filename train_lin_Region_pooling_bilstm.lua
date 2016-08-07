@@ -8,6 +8,7 @@ require 'cutorch';
 require 'cunn';
 require 'hdf5';
 require 'misc.Bilstm';
+require 'misc.Zigzag';
 cjson=require('cjson');
 LSTM=require 'misc.LSTM';
 
@@ -27,19 +28,21 @@ cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and
 cmd:option('-num_output', 1000, 'number of output answers')
 cmd:option('-CNNmodel', 'VGG16', 'CNN model')
 cmd:option('-layer', 30, 'layer number')
-cmd:option('-num_region',196,'number of image regions')
+cmd:option('-num_region_width', 14, 'number of image regions in the side of width')
+cmd:option('-num_region_height', 14, 'number of image regions in the side of heigth')
 cmd:option('-imdim', 512, 'image feature dimension')
 
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
+cmd:option('-pooling_window_size', 2, 'size of pooling window right before bilstm')
 cmd:option('-batch_size',50,'batch_size for each iterations')
 cmd:option('-max_iters', 50000, 'max number of iterations to run for ')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
 cmd:option('-rnn_layer',2,'number of the rnn layer')
-cmd:option('-common_embedding_size', 256, 'size of the common embedding vector')
+cmd:option('-common_embedding_size', 512, 'size of the common embedding vector')
 cmd:option('-img_norm', 1, 'normalize the image feature. 1 = normalize, 0 = not normalize')
 
 --check point
@@ -92,7 +95,7 @@ if opt.CNNmodel == 'VGG19' then
 elseif opt.CNNmodel == 'GoogLeNet' then
     input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
 elseif opt.CNNmodel == 'VGG16' then
-    input_img_name = string.format('s%d_%s_l%d_d%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.imdim)
+    input_img_name = string.format('s%d_%s_l%d_d%dx%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim,opt.num_region_width,opt.num_region_height)
 else
     print('CNN model name error')
 end
@@ -102,7 +105,7 @@ if opt.subset then
 else
     input_name = string.format('data_prepro_s%d',opt.split)
 end
-local input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
+local input_img_h5 = 'data_img_' .. input_img_name .. 'norm.h5'
 local input_ques_h5 = input_name .. '.h5'
 local input_json = input_name .. '.json'
 local CP_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_iter%%d.t7',
@@ -133,15 +136,12 @@ h5_file:close()
 dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
 
 -- Normalize the image feature
-if opt.img_norm == 1 then
-  print(dataset['fv_im']:size())
-  local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),3))
-  print(torch.norm(dataset['fv_im'], 2, 3):size())
-  print(nm:size())
-  nm[nm:eq(0)]=1e-5
-  dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,1,nhimage)):float()
-end
-assert(torch.sum(dataset['fv_im']:ne(dataset['fv_im']))==0)
+--if opt.img_norm == 1 then
+--  local nm = torch.norm(dataset['fv_im'], 2, 2)
+--  nm[nm:eq(0)]=1e-5
+--  dataset['fv_im']=torch.cdiv(dataset['fv_im'], torch.repeatTensor(nm,1,nhimage,1,1)):float()
+--end
+--assert(torch.sum(dataset['fv_im']:ne(dataset['fv_im']))==0)
 
 count = 0
 for i, w in pairs(json_file['ix_to_word']) do count = count + 1 end
@@ -168,25 +168,32 @@ embedding_net_q=nn.Sequential()
 encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_size,nlstm_layers_q,0.5)
 
 --multimodal way of combining different spaces
+local nhquestion = 2 * lstm_size_q * nlstm_layers_q
+local grid_height = opt.num_region_height
+local grid_width = opt.num_region_width
+local ws = opt.pooling_window_size
 multimodal_net=nn.Sequential()
-        :add(netdef.QxII(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+        :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
+        :add(nn.SpatialMaxPooling(ws, ws, ws, ws))
         :add(nn.Tanh())
-        :add(nn.SplitTable(1, 2))
+        :add(nn.Zigzag())
+        :add(nn.SplitTable(2, 2))
 
 -- correlate the multimodel features by bidirection lstm.
+local num_selected_region = (grid_height/ws)*(grid_width/ws)
 fusion_net = nn.Bilstm(common_embedding_size, lstm_size_q, common_embedding_size/2, 
-                       1, opt.num_region, 0.5, opt.gpuid)
+                       1, num_selected_region, 0.5, opt.gpuid)
 
 -- answer generation
 add_new_index = nn.ParallelTable()
-for i=1,opt.num_region do
+for i=1,num_selected_region do
     add_new_index:add(nn.Reshape(1, common_embedding_size))
 end
 answer_net=nn.Sequential()
         :add(add_new_index)
         :add(nn.JoinTable(1, 2))
-        :add(nn.Reshape(1,opt.num_region,common_embedding_size))
-        :add(nn.SpatialMaxPooling(1,opt.num_region))
+        :add(nn.Reshape(1,num_selected_region,common_embedding_size))
+        :add(nn.SpatialMaxPooling(1,num_selected_region))
         :add(nn.Squeeze())
         :add(nn.Dropout(0.5))
         :add(nn.Linear(common_embedding_size,noutput))
@@ -206,7 +213,7 @@ dummy_dend_state_f = {
       torch.zeros(batch_size, 2*lstm_size_q*1),
       torch.zeros(batch_size, 2*lstm_size_q*1),
 }
-batch_per_step_f = torch.LongTensor(opt.num_region):fill(batch_size)
+batch_per_step_f = torch.LongTensor(num_selected_region):fill(batch_size)
 
 if opt.gpuid >= 0 then
   print('shipped data function to cuda...')
