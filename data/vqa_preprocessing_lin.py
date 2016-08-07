@@ -5,8 +5,8 @@ Version: 1.0
 Contributor: Jiasen Lu
 
 Modified by Yuetan Lin (2016/06/17 22:34)
+Modified by Yuetan Lin (2016/08/06 10:54)
 """
-
 
 # Download the VQA Questions from http://www.visualqa.org/download.html
 import json
@@ -14,14 +14,13 @@ import os
 import argparse
 
 def download_vqa():
+    # Download the VQA Questions
     os.system('wget http://visualqa.org/data/mscoco/vqa/Questions_Train_mscoco.zip -P zip/')
     os.system('wget http://visualqa.org/data/mscoco/vqa/Questions_Val_mscoco.zip -P zip/')
     os.system('wget http://visualqa.org/data/mscoco/vqa/Questions_Test_mscoco.zip -P zip/')
-
     # Download the VQA Annotations
     os.system('wget http://visualqa.org/data/mscoco/vqa/Annotations_Train_mscoco.zip -P zip/')
     os.system('wget http://visualqa.org/data/mscoco/vqa/Annotations_Val_mscoco.zip -P zip/')
-
 
     # Unzip the annotations
     os.system('unzip zip/Questions_Train_mscoco.zip -d annotations/')
@@ -30,15 +29,24 @@ def download_vqa():
     os.system('unzip zip/Annotations_Train_mscoco.zip -d annotations/')
     os.system('unzip zip/Annotations_Val_mscoco.zip -d annotations/')
 
-
 def main(params):
     if params['download'] == 'True':
         download_vqa()
 
+    issubset = params['subset'] == 'True'
+    if issubset:
+        train_name = 'subtrain2014'
+        val_name = 'subval2014'
+        test_name = 'subtest2015'
+        testdev_name = 'subtest-dev2015'
+    else:
+        train_name = 'train2014'
+        val_name = 'val2014'
+        test_name = 'test2015'
+        testdev_name = 'test-dev2015'
     '''
     Put the VQA data into single json file, where [[Question_id, Image_id, Question, multipleChoice_answer, Answer] ... ]
     '''
-
     train = []
     test = []
     imdir='%s/COCO_%s_%012d.jpg'
@@ -46,11 +54,11 @@ def main(params):
     if params['split'] == 1:
 
         print 'Loading annotations and questions...'
-        train_anno = json.load(open('annotations/mscoco_train2014_annotations.json', 'r'))
-        val_anno = json.load(open('annotations/mscoco_val2014_annotations.json', 'r'))
+        train_anno = json.load(open('annotations/mscoco_'+train_name+'_annotations.json', 'r'))
+        val_anno = json.load(open('annotations/mscoco_'+val_name+'_annotations.json', 'r'))
 
-        train_ques = json.load(open('annotations/MultipleChoice_mscoco_train2014_questions.json', 'r'))
-        val_ques = json.load(open('annotations/MultipleChoice_mscoco_val2014_questions.json', 'r'))
+        train_ques = json.load(open('annotations/MultipleChoice_mscoco_'+train_name+'_questions.json', 'r'))
+        val_ques = json.load(open('annotations/MultipleChoice_mscoco_'+val_name+'_questions.json', 'r'))
 
         subtype = 'train2014'
         for i in range(len(train_anno['annotations'])):
@@ -73,14 +81,15 @@ def main(params):
             mc_ans = val_ques['questions'][i]['multiple_choices']
 
             test.append({'ques_id': question_id, 'img_path': image_path, 'question': question, 'MC_ans': mc_ans})
+
     elif params['split'] == 2:
         print 'Loading annotations and questions...'
-        train_anno = json.load(open('annotations/mscoco_train2014_annotations.json', 'r'))
-        val_anno = json.load(open('annotations/mscoco_val2014_annotations.json', 'r'))
+        train_anno = json.load(open('annotations/mscoco_'+train_name+'_annotations.json', 'r'))
+        val_anno = json.load(open('annotations/mscoco_'+val_name+'_annotations.json', 'r'))
 
-        train_ques = json.load(open('annotations/MultipleChoice_mscoco_train2014_questions.json', 'r'))
-        val_ques = json.load(open('annotations/MultipleChoice_mscoco_val2014_questions.json', 'r'))
-        test_ques = json.load(open('annotations/MultipleChoice_mscoco_test2015_questions.json', 'r'))
+        train_ques = json.load(open('annotations/MultipleChoice_mscoco_'+train_name+'_questions.json', 'r'))
+        val_ques = json.load(open('annotations/MultipleChoice_mscoco_'+val_name+'_questions.json', 'r'))
+        test_ques = json.load(open('annotations/MultipleChoice_mscoco_'+test_name+'_questions.json', 'r'))
 
         subtype = 'train2014'
         for i in range(len(train_anno['annotations'])):
@@ -113,14 +122,15 @@ def main(params):
             mc_ans = test_ques['questions'][i]['multiple_choices']
 
             test.append({'ques_id': question_id, 'img_path': image_path, 'question': question, 'MC_ans': mc_ans})
+
     elif params['split'] == 3:
         print 'Loading annotations and questions...'
-        train_anno = json.load(open('annotations/mscoco_train2014_annotations.json', 'r'))
-        val_anno = json.load(open('annotations/mscoco_val2014_annotations.json', 'r'))
+        train_anno = json.load(open('annotations/mscoco_'+train_name+'_annotations.json', 'r'))
+        val_anno = json.load(open('annotations/mscoco_'+val_name+'_annotations.json', 'r'))
 
-        train_ques = json.load(open('annotations/MultipleChoice_mscoco_train2014_questions.json', 'r'))
-        val_ques = json.load(open('annotations/MultipleChoice_mscoco_val2014_questions.json', 'r'))
-        test_ques = json.load(open('annotations/MultipleChoice_mscoco_test-dev2015_questions.json', 'r'))
+        train_ques = json.load(open('annotations/MultipleChoice_mscoco_'+train_name+'_questions.json', 'r'))
+        val_ques = json.load(open('annotations/MultipleChoice_mscoco_'+val_name+'_questions.json', 'r'))
+        test_ques = json.load(open('annotations/MultipleChoice_mscoco_'+testdev_name+'_questions.json', 'r'))
 
         subtype = 'train2014'
         for i in range(len(train_anno['annotations'])):
@@ -156,15 +166,18 @@ def main(params):
 
     print 'Training sample %d, Testing sample %d...' %(len(train), len(test))
 
-    json.dump(train, open('vqa_raw_s%d_train.json'%params['split'], 'w'))
-    json.dump(test, open('vqa_raw_s%d_test.json'%params['split'], 'w'))
+    if issubset:
+        json.dump(train, open('vqa_raw_sub_s%d_train.json'%params['split'], 'w'))
+        json.dump(test, open('vqa_raw_sub_s%d_test.json'%params['split'], 'w'))
+    else:
+        json.dump(train, open('vqa_raw_s%d_train.json'%params['split'], 'w'))
+        json.dump(test, open('vqa_raw_s%d_test.json'%params['split'], 'w'))
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
-
     # input json
     parser.add_argument('--download', default='False', help='Download and extract data from VQA server')
+    parser.add_argument('--subset', default='False', help='False: Generate subset, True: Generate all')
     parser.add_argument('--split', default=1, type=int, help='1: train on Train and test on Val, 2: train on Train+Val and test on Test, 3: train on Train+Val and test on Test-dev')
 
     args = parser.parse_args()

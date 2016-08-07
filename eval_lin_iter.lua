@@ -36,8 +36,7 @@ cmd:option('-checkpoint_path', 'model/', 'folder to save checkpoints')
 cmd:option('-CP_name', 'lstm_save_iter%d.t7', 'checkpoints file names')
 
 -- Model parameter settings (shoud be the same with the training)
-cmd:option('-imdim',512,'image feature dimension')
-cmd:option('-num_region',196,'number of image regions')
+cmd:option('-imdim',4096,'image feature dimension')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
@@ -60,6 +59,7 @@ if opt.gpuid >= 0 then
   if opt.backend == 'cudnn' then require 'cudnn' end
   cutorch.setDevice(opt.gpuid + 1)
 end
+
 
 ------------------------------------------------------------------------
 -- Setting the parameters
@@ -128,9 +128,9 @@ dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
 
 -- Normalize the image feature
 if opt.img_norm == 1 then
-    local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),3))
-    nm[nm:eq(0)]=1e-5
-    dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,1,nhimage)):float()
+	local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),2))
+	nm[nm:eq(0)]=1e-5
+	dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,opt.imdim)):float()
 end
 assert(torch.sum(dataset['fv_im']:ne(dataset['fv_im']))==0)
 
@@ -146,18 +146,18 @@ buffer_size_q=dataset['question']:size()[2]
 
 --embedding: word-embedding
 embedding_net_q=nn.Sequential()
-                :add(nn.Linear(vocabulary_size_q,embedding_size_q))
-                :add(nn.Dropout(0.5))
-                :add(nn.Tanh())
+				:add(nn.Linear(vocabulary_size_q,embedding_size_q))
+				:add(nn.Dropout(0.5))
+				:add(nn.Tanh())
 --encoder: RNN body
 encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_size,nlstm_layers_q,0.5)
 
 --MULTIMODAL
 --multimodal way of combining different spaces
 multimodal_net=nn.Sequential()
-                :add(netdef.AxBB(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
-                :add(nn.Dropout(0.5))
-                :add(nn.Linear(common_embedding_size,noutput))
+				:add(netdef.AxB(2*lstm_size_q*nlstm_layers_q,nhimage,common_embedding_size,0.5))
+				:add(nn.Dropout(0.5))
+				:add(nn.Linear(common_embedding_size,noutput))
 
 --criterion
 criterion=nn.CrossEntropyCriterion()
@@ -167,13 +167,13 @@ dummy_state_q=torch.Tensor(lstm_size_q*nlstm_layers_q*2):fill(0)
 dummy_output_q=torch.Tensor(dummy_output_size):fill(0)
 
 if opt.gpuid >= 0 then
-    print('shipped data function to cuda...')
-    embedding_net_q = embedding_net_q:cuda()
-    encoder_net_q = encoder_net_q:cuda()
-    multimodal_net = multimodal_net:cuda()
-    criterion = criterion:cuda()
-    dummy_state_q = dummy_state_q:cuda()
-    dummy_output_q = dummy_output_q:cuda()
+	print('shipped data function to cuda...')
+	embedding_net_q = embedding_net_q:cuda()
+	encoder_net_q = encoder_net_q:cuda()
+	multimodal_net = multimodal_net:cuda()
+	criterion = criterion:cuda()
+	dummy_state_q = dummy_state_q:cuda()
+	dummy_output_q = dummy_output_q:cuda()
 end
 
 -- setting to evaluation
@@ -191,29 +191,29 @@ multimodal_w,multimodal_dw=multimodal_net:getParameters();
 --Grab Next Batch--
 ------------------------------------------------------------------------
 function dataset:next_batch_test(s,e)
-    local batch_size=e-s+1;
-    local qinds=torch.LongTensor(batch_size):fill(0);
-    local iminds=torch.LongTensor(batch_size):fill(0);
-    for i=1,batch_size do
-        qinds[i]=s+i-1;
-        iminds[i]=dataset['img_list'][qinds[i]];
-    end
+	local batch_size=e-s+1;
+	local qinds=torch.LongTensor(batch_size):fill(0);
+	local iminds=torch.LongTensor(batch_size):fill(0);
+	for i=1,batch_size do
+		qinds[i]=s+i-1;
+		iminds[i]=dataset['img_list'][qinds[i]];
+	end
 
-    local fv_sorted_q=sort_encoding_onehot_right_align(dataset['question']:index(1,qinds),dataset['lengths_q']:index(1,qinds),vocabulary_size_q);
+	local fv_sorted_q=sort_encoding_onehot_right_align(dataset['question']:index(1,qinds),dataset['lengths_q']:index(1,qinds),vocabulary_size_q);
 
-    local fv_im=dataset['fv_im']:index(1,iminds);
-    local qids=dataset['ques_id']:index(1,qinds);
+	local fv_im=dataset['fv_im']:index(1,iminds);
+	local qids=dataset['ques_id']:index(1,qinds);
 
-    -- ship to gpu
-    if opt.gpuid >= 0 then
-        fv_sorted_q[1]=fv_sorted_q[1]:cuda()
-        fv_sorted_q[3]=fv_sorted_q[3]:cuda()
-        fv_sorted_q[4]=fv_sorted_q[4]:cuda()
-        fv_im = fv_im:cuda()
-    end
+	-- ship to gpu
+	if opt.gpuid >= 0 then
+		fv_sorted_q[1]=fv_sorted_q[1]:cuda()
+		fv_sorted_q[3]=fv_sorted_q[3]:cuda()
+		fv_sorted_q[4]=fv_sorted_q[4]:cuda()
+		fv_im = fv_im:cuda()
+	end
 
-    --print(string.format('batch_sort:%f',timer:time().real));
-    return fv_sorted_q,fv_im:cuda(),qids,batch_size;
+	--print(string.format('batch_sort:%f',timer:time().real));
+	return fv_sorted_q,fv_im:cuda(),qids,batch_size;
 end
 
 -- duplicate the RNN
@@ -222,21 +222,21 @@ local encoder_net_buffer_q
 -- Objective Function and Optimization
 ------------------------------------------------------------------------
 function forward(s,e)
-    local timer = torch.Timer();
-    --grab a batch--
-    local fv_sorted_q,fv_im,qids,batch_size=dataset:next_batch_test(s,e);
-    local question_max_length=fv_sorted_q[2]:size(1);
+	local timer = torch.Timer();
+	--grab a batch--
+	local fv_sorted_q,fv_im,qids,batch_size=dataset:next_batch_test(s,e);
+	local question_max_length=fv_sorted_q[2]:size(1);
 
-    --embedding forward--
-    local word_embedding_q=split_vector(embedding_net_q:forward(fv_sorted_q[1]),fv_sorted_q[2]);
+	--embedding forward--
+	local word_embedding_q=split_vector(embedding_net_q:forward(fv_sorted_q[1]),fv_sorted_q[2]);
 
-    --encoder forward--
-    local states_q,junk2=rnn_forward(encoder_net_buffer_q,torch.repeatTensor(dummy_state_q:fill(0),batch_size,1),word_embedding_q,fv_sorted_q[2]);
+	--encoder forward--
+	local states_q,junk2=rnn_forward(encoder_net_buffer_q,torch.repeatTensor(dummy_state_q:fill(0),batch_size,1),word_embedding_q,fv_sorted_q[2]);
 
-    --multimodal/criterion forward--
-    local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4]);
-    local scores=multimodal_net:forward({tv_q,fv_im});
-    return scores:double(),qids;
+	--multimodal/criterion forward--
+	local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4]);
+	local scores=multimodal_net:forward({tv_q,fv_im});
+	return scores:double(),qids;
 end
 
 ------------------------------------------------------------------------
@@ -249,7 +249,7 @@ function writeAll(file,data)
 end
 
 function saveJson(fname,t)
-    return writeAll(fname,cjson.encode(t))
+	return writeAll(fname,cjson.encode(t))
 end
 
 
@@ -332,11 +332,11 @@ embedding_w_q:copy(model_param['embedding_w_q']);
 encoder_w_q:copy(model_param['encoder_w_q']);
 multimodal_w:copy(model_param['multimodal_w']);
 
+
 sizes={encoder_w_q:size(1),embedding_w_q:size(1),multimodal_w:size(1)};
 
--- duplicate the RNN
-encoder_net_buffer_q=dupe_rnn(encoder_net_q,buffer_size_q);
 
+encoder_net_buffer_q=dupe_rnn(encoder_net_q,buffer_size_q);
 -----------------------------------------------------------------------
 -- Do Prediction
 -----------------------------------------------------------------------
@@ -344,9 +344,9 @@ nqs=dataset['question']:size(1);
 scores=torch.Tensor(nqs,noutput);
 qids=torch.LongTensor(nqs);
 for i=1,nqs,batch_size do
-    xlua.progress(i, nqs)
-    r=math.min(i+batch_size-1,nqs);
-    scores[{{i,r},{}}],qids[{{i,r}}]=forward(i,r);
+	xlua.progress(i, nqs)
+	r=math.min(i+batch_size-1,nqs);
+	scores[{{i,r},{}}],qids[{{i,r}}]=forward(i,r);
 end
 xlua.progress(nqs, nqs)
 
@@ -355,7 +355,7 @@ tmp,pred=torch.max(scores,2);
 
 --response={};
 --for i=1,nqs do
---  table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
+--	table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
 --end
 --paths.mkdir(opt.out_path)
 --saveJson(opt.out_path .. 'OpenEnded_' .. result_name,response);
@@ -363,17 +363,17 @@ tmp,pred=torch.max(scores,2);
 
 mc_response={};
 for i=1,nqs do
-  local mc_prob = {}
-  local mc_idx = dataset['MC_ans_test'][i]
-  local tmp_idx = {}
-  for j=1, mc_idx:size()[1] do
-    if mc_idx[j] ~= 0 then
-      table.insert(mc_prob, scores[{i, mc_idx[j]}])
-      table.insert(tmp_idx, mc_idx[j])
-    end
-  end
-  local tmp,tmp2=torch.max(torch.Tensor(mc_prob), 1);
-  table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
+	local mc_prob = {}
+	local mc_idx = dataset['MC_ans_test'][i]
+	local tmp_idx = {}
+	for j=1, mc_idx:size()[1] do
+		if mc_idx[j] ~= 0 then
+			table.insert(mc_prob, scores[{i, mc_idx[j]}])
+			table.insert(tmp_idx, mc_idx[j])
+		end
+	end
+	local tmp,tmp2=torch.max(torch.Tensor(mc_prob), 1);
+	table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
 end
 saveJson(opt.out_path .. 'MultipleChoice_' .. result_name, mc_response);
 print('save results in: '..opt.out_path .. 'MultipleChoice_' .. result_name)
