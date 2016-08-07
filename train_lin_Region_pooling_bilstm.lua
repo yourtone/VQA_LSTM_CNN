@@ -354,7 +354,7 @@ function JdJ(x)
   end
 
   gradients=join_vector({encoder_adw_q,embedding_dw_q,multimodal_dw,fusion_dw,answer_dw})
-  gradients:clamp(-10,10)
+  gradients:clamp(-5,5)
   if running_avg == nil then
     running_avg = f
   end

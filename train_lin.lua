@@ -21,29 +21,29 @@ cmd:text()
 cmd:text('Options')
 
 -- Data input settings
-cmd:option('-input_img_h5','data_img.h5','path to the h5file containing the image feature')
-cmd:option('-input_ques_h5','data_prepro.h5','path to the h5file containing the preprocessed dataset')
-cmd:option('-input_json','data_prepro.json','path to the json file containing additional info and vocab')
+cmd:option('-subset', false, 'true: use subset, false: use all dataset')
+cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and test on Te, 3: train on Tr+V and test on Te-dev')
+cmd:option('-num_output', 1000, 'number of output answers')
+cmd:option('-CNNmodel', 'VGG19', 'CNN model')
+cmd:option('-layer', 43, 'layer number')
+cmd:option('-imdim', 4096, 'image feature dimension')
+cmd:option('-num_region',196,'number of image regions')
 
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
-cmd:option('-imdim',4096,'image feature dimension')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-max_iters', 150000, 'max number of iterations to run for ')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
 cmd:option('-rnn_layer',2,'number of the rnn layer')
 cmd:option('-common_embedding_size', 1024, 'size of the common embedding vector')
-cmd:option('-num_output', 1000, 'number of output answers')
 cmd:option('-img_norm', 1, 'normalize the image feature. 1 = normalize, 0 = not normalize')
 
 --check point
 cmd:option('-save_checkpoint_every', 25000, 'how often to save a model checkpoint?')
 cmd:option('-checkpoint_path', 'model/', 'folder to save checkpoints')
-cmd:option('-CP_name', 'lstm_save_iter%d.t7', 'checkpoints file names')
-cmd:option('-final_model_name', 'lstm.t7', 'checkpoints file names')
 
 -- misc
 cmd:option('-backend', 'cudnn', 'nn|cudnn')
@@ -84,23 +84,48 @@ paths.mkdir(model_path)
 ------------------------------------------------------------------------
 -- Loading Dataset
 ------------------------------------------------------------------------
-print('DataLoader loading h5 file: ', opt.input_json)
-local file = io.open(opt.input_json, 'r')
+local input_name
+local input_img_name
+if opt.CNNmodel == 'VGG19' then
+    input_img_name = string.format('s%d_%s_l%d_d%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim)
+elseif opt.CNNmodel == 'GoogLeNet' then
+    input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
+elseif opt.CNNmodel == 'VGG16' then
+    input_img_name = string.format('s%d_%s_l%d_d%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.imdim)
+else
+    print('CNN model name error')
+end
+if opt.subset then
+    input_name = string.format('data_prepro_sub_s%d',opt.split)
+    input_img_name = 'sub_' .. input_img_name
+else
+    input_name = string.format('data_prepro_s%d',opt.split)
+end
+local input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
+local input_ques_h5 = input_name .. '.h5'
+local input_json = input_name .. '.json'
+local CP_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_iter%%d.t7',
+    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
+local final_model_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d.t7',
+    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
+
+print('DataLoader loading h5 file: ', input_json)
+local file = io.open(input_json, 'r')
 local text = file:read()
 file:close()
 json_file = cjson.decode(text)
 
-print('DataLoader loading h5 file: ', opt.input_ques_h5)
+print('DataLoader loading h5 file: ', input_ques_h5)
 local dataset = {}
-local h5_file = hdf5.open(opt.input_ques_h5, 'r')
+local h5_file = hdf5.open(input_ques_h5, 'r')
 dataset['question'] = h5_file:read('/ques_train'):all()
 dataset['lengths_q'] = h5_file:read('/ques_length_train'):all()
 dataset['img_list'] = h5_file:read('/img_pos_train'):all()
 dataset['answers'] = h5_file:read('/answers'):all()
 h5_file:close()
 
-print('DataLoader loading h5 file: ', opt.input_img_h5)
-local h5_file = hdf5.open(opt.input_img_h5, 'r')
+print('DataLoader loading h5 file: ', input_img_h5)
+local h5_file = hdf5.open(input_img_h5, 'r')
 dataset['fv_im'] = h5_file:read('/images_train'):all()
 h5_file:close()
 
@@ -300,7 +325,7 @@ local state={}
 for iter = 1, opt.max_iters do
 	if iter%opt.save_checkpoint_every == 0 then
 		paths.mkdir(model_path..'save')
-		torch.save(string.format(model_path..'save/'..opt.CP_name,iter),
+		torch.save(string.format(model_path..'save/'..CP_name,iter),
 			{encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})
 	end
 	if iter%100 == 0 then
@@ -315,5 +340,5 @@ for iter = 1, opt.max_iters do
 end
 
 -- Saving the final model
-torch.save(string.format(model_path..opt.final_model_name,i),
+torch.save(string.format(model_path..final_model_name,i),
 	{encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})

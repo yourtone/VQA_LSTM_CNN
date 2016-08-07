@@ -59,7 +59,7 @@ function netdef.Qx2DII(nhA, nhB, hB, wB, nhcommon, dropout)
     local i = nn.Identity()();
     local qc = nn.Tanh()(nn.Linear(nhA, nhcommon)(nn.Dropout(dropout)(q)));
     local ic = nn.Tanh()(nn.SpatialConvolution(nhB, nhcommon, 1, 1)(nn.Dropout(dropout)(i)));
-    qc = nn.Reshape(nhcommon, hB, wB)(nn.Replicate(hB*wB, 3, 1)(qc))
+    qc = nn.Reshape(nhcommon, hB, wB)(nn.Replicate(hB*wB, 2, 1)(qc))
     local output = nn.CMulTable()({qc, ic})
     return nn.gModule({q, i}, {output})
 end

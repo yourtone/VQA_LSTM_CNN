@@ -15,19 +15,20 @@ npy4th = require 'npy4th'
 cmd = torch.CmdLine()
 cmd:text()
 cmd:text('Options')
-cmd:option('-input_json','data_prepro.json','path to the json file containing vocab and answers')
-cmd:option('-input_npy_train','VQA-train2014-VGG16-snake196x512.npy','path to the train npy file')
-cmd:option('-input_npy_val','VQA-val2014-VGG16-snake196x512.npy','path to the val npy file')
-cmd:option('-input_npy_test','VQA-test2015-VGG16-snake196x512.npy','path to the test npy file')
-cmd:option('-im_path_train','train_im_paths.txt','path to the train impath file')
-cmd:option('-im_path_val','val_im_paths.txt','path to the val impath file')
-cmd:option('-im_path_test','test_im_paths.txt','path to the test impath file')
+cmd:option('-subset', false, 'true: use subset, false: use all dataset')
+cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and test on Te, 3: train on Tr+V and test on Te-dev')
+cmd:option('-num_ans', 1000, 'number of top answers for the final classifications')
+cmd:option('-CNNmodel', 'VGG16', 'CNN model')
+cmd:option('-layer', 30, 'layer number')
+cmd:option('-num_region', 196, 'number of image features per image')
+cmd:option('-dim', 512, 'image feature dimension')
 
-cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Train+Val and test on Test, 3: train on Train+Val and test on Test-dev')
-cmd:option('-dim1', 196, 'number of image features per image')
-cmd:option('-dim2', 512, 'image feature dimension')
-
-cmd:option('-out_name', 'data_img.h5', 'output name')
+cmd:option('-input_npy_train','/home/deepnet/lyt/vqa/feature/VQA/VQA-train2014-VGG16-snake196x512.npy','path to the train npy file')
+cmd:option('-input_npy_val','/home/deepnet/lyt/vqa/feature/VQA/VQA-val2014-VGG16-snake196x512.npy','path to the val npy file')
+cmd:option('-input_npy_test','/home/deepnet/lyt/vqa/feature/VQA/VQA-test2015-VGG16-snake196x512.npy','path to the test npy file')
+cmd:option('-im_path_train','/home/deepnet/lyt/vqa/dataset/data/VQA/done/train2014_im_path.txt','path to the train impath file')
+cmd:option('-im_path_val','/home/deepnet/lyt/vqa/dataset/data/VQA/done/val2014_im_path.txt','path to the val impath file')
+cmd:option('-im_path_test','/home/deepnet/lyt/vqa/dataset/data/VQA/done/test2015_im_path.txt','path to the test impath file')
 
 opt = cmd:parse(arg)
 print(opt)
@@ -87,8 +88,20 @@ for i = 1,sz do
   test_indlist[test_imlist[i]] = i
 end
 
+local input_json
+local out_name
+if opt.subset then
+    input_json = string.format('data_prepro_sub_s%d.json',opt.split)
+    out_name = string.format('data_img_sub_s%d_%s_l%d_d%dx%d.h5',
+      opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.dim)
+else
+    input_json = string.format('data_prepro_s%d.json',opt.split)
+    out_name = string.format('data_img_s%d_%s_l%d_d%dx%d.h5',
+      opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.dim)
+end
+
 -- open the json file
-local f = io.open(opt.input_json, 'r')
+local f = io.open(input_json, 'r')
 local text = f:read()
 f:close()
 json_file = cjson.decode(text)
@@ -115,8 +128,8 @@ end
 print('Training feature size:')
 print(train_npy:size())
 
-local ndim1=opt.dim1
-local ndim2=opt.dim2
+local ndim1=opt.num_region
+local ndim2=opt.dim
 local sz=#train_list
 local feat_train=torch.Tensor(sz,ndim1,ndim2)
 print(string.format('actual processing %d train image features...',sz))
@@ -126,6 +139,10 @@ for i=1,sz do
   --collectgarbage()
 end
 xlua.progress(sz, sz)
+local train_h5_file = hdf5.open(out_name, 'w')
+train_h5_file:write('/images_train', feat_train:float())
+train_h5_file:close()
+feat_train = nil
 train_npy = nil
 collectgarbage()
 
@@ -149,8 +166,7 @@ xlua.progress(sz, sz)
 test_npy = nil
 collectgarbage()
 
-local train_h5_file = hdf5.open(opt.out_name, 'w')
-train_h5_file:write('/images_train', feat_train:float())
+train_h5_file = hdf5.open(out_name, 'a')
 train_h5_file:write('/images_test', feat_test:float())
 train_h5_file:close()
-print('save image feature to: '..opt.out_name)
+print('save image feature to: '..out_name)
