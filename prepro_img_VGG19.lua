@@ -18,16 +18,18 @@ require 'xlua'
 cmd = torch.CmdLine()
 cmd:text()
 cmd:text('Options')
-cmd:option('-input_json','data_prepro.json','path to the json file containing vocab and answers')
+cmd:option('-subset', false, 'true: use subset, false: use all dataset')
+cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and test on Te, 3: train on Tr+V and test on Te-dev')
+cmd:option('-num_ans', 1000, 'number of top answers for the final classifications')
 cmd:option('-image_root','data/','path to the image root')
-cmd:option('-cnn_proto', '', 'path to the cnn prototxt')
-cmd:option('-cnn_model', '', 'path to the cnn model')
+cmd:option('-cnn_proto', '/home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers_deploy.prototxt', 'path to the cnn prototxt')
+cmd:option('-cnn_model', '/home/deepnet/caffe/models/VGG_19/VGG_ILSVRC_19_layers.caffemodel', 'path to the cnn model')
 cmd:option('-batch_size', 10, 'batch_size')
 
+cmd:option('-CNNmodel', 'VGG19', 'CNN model')
 cmd:option('-layer', 43, 'layer number')
 cmd:option('-dim', 4096, 'image feature dimension')
 
-cmd:option('-out_name', 'data_img.h5', 'output name')
 cmd:option('-gpuid', 1, 'which gpu to use. -1 = use CPU')
 cmd:option('-backend', 'cudnn', 'nn|cudnn')
 
@@ -62,9 +64,16 @@ function loadim(imname)
 end
 
 local image_root = opt.image_root
--- open the mdf5 file
-
-local file = io.open(opt.input_json, 'r')
+local input_json
+local out_name
+if opt.subset then
+    input_json = string.format('data_prepro_sub_s%d.json',opt.split)
+    out_name = string.format('data_img_sub_s%d_%s_l%d_d%d.h5',opt.split,opt.CNNmodel,opt.layer,opt.dim)
+else
+    input_json = string.format('data_prepro_s%d.json',opt.split)
+    out_name = string.format('data_img_s%d_%s_l%d_d%d.h5',opt.split,opt.CNNmodel,opt.layer,opt.dim)
+end
+local file = io.open(input_json, 'r')
 local text = file:read()
 file:close()
 json_file = cjson.decode(text)
@@ -97,7 +106,7 @@ for i=1,sz,batch_size do
     collectgarbage()
 end
 xlua.progress(sz, sz)
-local train_h5_file = hdf5.open(opt.out_name, 'w')
+local train_h5_file = hdf5.open(out_name, 'w')
 train_h5_file:write('/images_train', feat_train:float())
 train_h5_file:close()
 feat_train = nil
@@ -120,7 +129,7 @@ for i=1,sz,batch_size do
 end
 xlua.progress(sz, sz)
 
-local train_h5_file = hdf5.open(opt.out_name, 'a')
+local train_h5_file = hdf5.open(out_name, 'a')
 --train_h5_file:write('/images_train', feat_train:float())
 train_h5_file:write('/images_test', feat_test:float())
 train_h5_file:close()

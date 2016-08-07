@@ -19,21 +19,22 @@ cmd:text('Test the Visual Question Answering model')
 cmd:text()
 cmd:text('Options')
 -- Data input settings
-cmd:option('-input_img_h5','data_img.h5','path to the h5file containing the image feature')
-cmd:option('-input_ques_h5','data_prepro.h5','path to the h5file containing the preprocessed dataset')
-cmd:option('-input_json','data_prepro.json','path to the json file containing additional info and vocab')
-cmd:option('-model_path', 'model/lstm.t7', 'path to a model checkpoint to initialize model weights from. Empty = don\'t')
+cmd:option('-subset', false, 'true: use subset, false: use all dataset')
+cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and test on Te, 3: train on Tr+V and test on Te-dev')
+cmd:option('-num_output', 1000, 'number of output answers')
+cmd:option('-CNNmodel', 'VGG19', 'CNN model')
+cmd:option('-layer', 43, 'layer number')
+cmd:option('-num_region',196,'number of image regions')
+cmd:option('-imdim', 4096, 'image feature dimension')
+
 cmd:option('-out_path', 'result/', 'path to save output json file')
-cmd:option('-result_name', 'lstm_s1_wct0_VGG19_l43_d4096_es200_rs512_rl2_cs1024_o1000.json', 'output json file name')
 
 -- Model parameter settings (shoud be the same with the training)
-cmd:option('-imdim',4096,'image feature dimension')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
 cmd:option('-rnn_layer',2,'number of the rnn layer')
 cmd:option('-common_embedding_size', 1024, 'size of the common embedding vector')
-cmd:option('-num_output', 1000, 'number of output answers')
 cmd:option('-img_norm', 1, 'normalize the image feature. 1 = normalize, 0 = not normalize')
 
 cmd:option('-backend', 'cudnn', 'nn|cudnn')
@@ -56,7 +57,6 @@ end
 ------------------------------------------------------------------------
 -- Setting the parameters
 ------------------------------------------------------------------------
-local model_path = opt.model_path
 local batch_size=opt.batch_size
 local embedding_size_q=opt.input_encoding_size
 local lstm_size_q=opt.rnn_size
@@ -69,15 +69,42 @@ local dummy_output_size=1
 ------------------------------------------------------------------------
 -- Loading Dataset
 ------------------------------------------------------------------------
-print('DataLoader loading h5 file: ', opt.input_json)
-local file = io.open(opt.input_json, 'r')
+local input_name
+local input_img_name
+if opt.CNNmodel == 'VGG19' then
+    input_img_name = string.format('s%d_%s_l%d_d%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim)
+elseif opt.CNNmodel == 'GoogLeNet' then
+    input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
+elseif opt.CNNmodel == 'VGG16' then
+    input_img_name = string.format('s%d_%s_l%d_d%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.imdim)
+else
+    print('CNN model name error')
+end
+if opt.subset then
+    input_name = string.format('data_prepro_sub_s%d',opt.split)
+    input_img_name = 'sub_' .. input_img_name
+else
+    input_name = string.format('data_prepro_s%d',opt.split)
+end
+local input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
+local input_ques_h5 = input_name .. '.h5'
+local input_json = input_name .. '.json'
+local CP_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_iter%%d.t7',
+    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
+local final_model_name = string.format('model/lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d.t7',
+    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
+local result_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_results.json',
+    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
+
+print('DataLoader loading h5 file: ', input_json)
+local file = io.open(input_json, 'r')
 local text = file:read()
 file:close()
 json_file = cjson.decode(text)
 
-print('DataLoader loading h5 file: ', opt.input_ques_h5)
+print('DataLoader loading h5 file: ', input_ques_h5)
 local dataset = {}
-local h5_file = hdf5.open(opt.input_ques_h5, 'r')
+local h5_file = hdf5.open(input_ques_h5, 'r')
 dataset['question'] = h5_file:read('/ques_test'):all()
 dataset['lengths_q'] = h5_file:read('/ques_length_test'):all()
 dataset['img_list'] = h5_file:read('/img_pos_test'):all()
@@ -85,8 +112,8 @@ dataset['ques_id'] = h5_file:read('/question_id_test'):all()
 dataset['MC_ans_test'] = h5_file:read('/MC_ans_test'):all()
 h5_file:close()
 
-print('DataLoader loading h5 file: ', opt.input_img_h5)
-local h5_file = hdf5.open(opt.input_img_h5, 'r')
+print('DataLoader loading h5 file: ', input_img_h5)
+local h5_file = hdf5.open(input_img_h5, 'r')
 dataset['fv_im'] = h5_file:read('/images_test'):all()
 h5_file:close()
 
@@ -153,7 +180,7 @@ encoder_w_q,encoder_dw_q=encoder_net_q:getParameters();
 multimodal_w,multimodal_dw=multimodal_net:getParameters();
 
 -- loading the model
-model_param=torch.load(model_path);
+model_param=torch.load(final_model_name);
 embedding_w_q:copy(model_param['embedding_w_q']);
 encoder_w_q:copy(model_param['encoder_w_q']);
 multimodal_w:copy(model_param['multimodal_w']);
@@ -249,8 +276,8 @@ for i=1,nqs do
 end
 
 paths.mkdir(opt.out_path)
-saveJson(opt.out_path .. 'OpenEnded_' .. opt.result_name,response);
-print('save results in: '..opt.out_path .. 'OpenEnded_' .. opt.result_name)
+saveJson(opt.out_path .. 'OpenEnded_' .. result_name,response);
+print('save results in: '..opt.out_path .. 'OpenEnded_' .. result_name)
 
 mc_response={};
 
@@ -268,5 +295,5 @@ for i=1,nqs do
 	table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
 end
 
-saveJson(opt.out_path .. 'MultipleChoice_' .. opt.result_name, mc_response);
-print('save results in: '..opt.out_path .. 'MultipleChoice_' .. opt.result_name)
+saveJson(opt.out_path .. 'MultipleChoice_' .. result_name, mc_response);
+print('save results in: '..opt.out_path .. 'MultipleChoice_' .. result_name)
