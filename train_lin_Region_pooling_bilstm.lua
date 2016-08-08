@@ -35,7 +35,7 @@ cmd:option('-imdim', 512, 'image feature dimension')
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
-cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
+cmd:option('-learning_rate_decay_every', 1000, 'every how many iterations thereafter to drop LR by half?')
 cmd:option('-pooling_window_size', 2, 'size of pooling window right before bilstm')
 cmd:option('-batch_size',50,'batch_size for each iterations')
 cmd:option('-max_iters', 50000, 'max number of iterations to run for ')
@@ -105,7 +105,12 @@ if opt.subset then
 else
     input_name = string.format('data_prepro_s%d',opt.split)
 end
-local input_img_h5 = 'data_img_' .. input_img_name .. 'norm.h5'
+local input_img_h5
+if opt.img_norm == 1 then
+  input_img_h5 = 'data_img_' .. input_img_name .. 'norm.h5'
+else
+  input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
+end
 local input_ques_h5 = input_name .. '.h5'
 local input_json = input_name .. '.json'
 local CP_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_iter%%d.t7',
@@ -134,14 +139,6 @@ dataset['fv_im'] = h5_file:read('/images_train'):all()
 h5_file:close()
 
 dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
-
--- Normalize the image feature
---if opt.img_norm == 1 then
---  local nm = torch.norm(dataset['fv_im'], 2, 2)
---  nm[nm:eq(0)]=1e-5
---  dataset['fv_im']=torch.cdiv(dataset['fv_im'], torch.repeatTensor(nm,1,nhimage,1,1)):float()
---end
---assert(torch.sum(dataset['fv_im']:ne(dataset['fv_im']))==0)
 
 count = 0
 for i, w in pairs(json_file['ix_to_word']) do count = count + 1 end
@@ -404,6 +401,9 @@ for iter = 1, opt.max_iters do
   end
   optim.rmsprop(JdJ, optimize.winit, optimize, state)
   optimize.learningRate=optimize.learningRate*decay_factor
+  if opt.learning_rate_decay_start>0 and iter>opt.learning_rate_decay_start and iter%opt.learning_rate_decay_every==0 then
+    optimize.learningRate = optimize.learningRate*0.5
+  end
   if iter%50 == 0 then -- change this to smaller value if out of the memory
     collectgarbage()
   end
