@@ -93,7 +93,12 @@ if opt.subset then
 else
     input_name = string.format('data_prepro_s%d',opt.split)
 end
-local input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
+local input_img_h5
+if opt.img_norm == 1 then
+  input_img_h5 = 'data_img_' .. input_img_name .. 'norm.h5'
+else
+  input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
+end
 local input_ques_h5 = input_name .. '.h5'
 local input_json = input_name .. '.json'
 local CP_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_iter%%d.t7',
@@ -125,14 +130,6 @@ dataset['fv_im'] = h5_file:read('/images_test'):all()
 h5_file:close()
 
 dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
-
--- Normalize the image feature
-if opt.img_norm == 1 then
-	local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),2))
-	nm[nm:eq(0)]=1e-5
-	dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,opt.imdim)):float()
-end
-assert(torch.sum(dataset['fv_im']:ne(dataset['fv_im']))==0)
 
 local count = 0
 for i, w in pairs(json_file['ix_to_word']) do count = count + 1 end

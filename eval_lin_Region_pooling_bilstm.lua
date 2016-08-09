@@ -8,9 +8,9 @@ require 'cutorch';
 require 'cunn';
 require 'hdf5';
 require 'misc.Bilstm';
+require 'misc.Zigzag';
 cjson=require('cjson');
 LSTM=require 'misc.LSTM';
-require 'xlua'
 
 -------------------------------------------------------------------------------
 -- Input arguments and options
@@ -28,7 +28,8 @@ cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and
 cmd:option('-num_output', 1000, 'number of output answers')
 cmd:option('-CNNmodel', 'VGG16', 'CNN model')
 cmd:option('-layer', 30, 'layer number')
-cmd:option('-num_region',196,'number of image regions')
+cmd:option('-num_region_width', 14, 'number of image regions in the side of width')
+cmd:option('-num_region_height', 14, 'number of image regions in the side of heigth')
 cmd:option('-imdim', 512, 'image feature dimension')
 
 cmd:option('-out_path', 'result/', 'path to save output json file')
@@ -36,13 +37,14 @@ cmd:option('-out_path', 'result/', 'path to save output json file')
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
-cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
+cmd:option('-learning_rate_decay_every', 1000, 'every how many iterations thereafter to drop LR by half?')
+cmd:option('-pooling_window_size', 2, 'size of pooling window right before bilstm')
 cmd:option('-batch_size',50,'batch_size for each iterations')
 cmd:option('-max_iters', 50000, 'max number of iterations to run for ')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
 cmd:option('-rnn_layer',2,'number of the rnn layer')
-cmd:option('-common_embedding_size', 256, 'size of the common embedding vector')
+cmd:option('-common_embedding_size', 512, 'size of the common embedding vector')
 cmd:option('-img_norm', 1, 'normalize the image feature. 1 = normalize, 0 = not normalize')
 
 --check point
@@ -73,7 +75,7 @@ end
 -- Setting the parameters
 ------------------------------------------------------------------------
 
-checkpoint_path = opt.checkpoint_path
+model_path = opt.checkpoint_path
 batch_size = opt.batch_size
 embedding_size_q = opt.input_encoding_size
 lstm_size_q = opt.rnn_size
@@ -93,7 +95,7 @@ if opt.CNNmodel == 'VGG19' then
 elseif opt.CNNmodel == 'GoogLeNet' then
     input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
 elseif opt.CNNmodel == 'VGG16' then
-    input_img_name = string.format('s%d_%s_l%d_d%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.imdim)
+    input_img_name = string.format('s%d_%s_l%d_d%dx%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim,opt.num_region_width,opt.num_region_height)
 else
     print('CNN model name error')
 end
@@ -166,25 +168,32 @@ embedding_net_q=nn.Sequential()
 encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_size,nlstm_layers_q,0.5)
 
 --multimodal way of combining different spaces
+local nhquestion = 2 * lstm_size_q * nlstm_layers_q
+local grid_height = opt.num_region_height
+local grid_width = opt.num_region_width
+local ws = opt.pooling_window_size
 multimodal_net=nn.Sequential()
-        :add(netdef.QxII(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+        :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
+        :add(nn.SpatialMaxPooling(ws, ws, ws, ws))
         :add(nn.Tanh())
-        :add(nn.SplitTable(1, 2))
+        :add(nn.Zigzag())
+        :add(nn.SplitTable(2, 2))
 
 -- correlate the multimodel features by bidirection lstm.
+local num_selected_region = (grid_height/ws)*(grid_width/ws)
 fusion_net = nn.Bilstm(common_embedding_size, lstm_size_q, common_embedding_size/2, 
-                       1, opt.num_region, 0.5, opt.gpuid)
+                       1, num_selected_region, 0.5, opt.gpuid)
 
 -- answer generation
 add_new_index = nn.ParallelTable()
-for i=1,opt.num_region do
+for i=1,num_selected_region do
     add_new_index:add(nn.Reshape(1, common_embedding_size))
 end
 answer_net=nn.Sequential()
         :add(add_new_index)
         :add(nn.JoinTable(1, 2))
-        :add(nn.Reshape(1,opt.num_region,common_embedding_size))
-        :add(nn.SpatialMaxPooling(1,opt.num_region))
+        :add(nn.Reshape(1,num_selected_region,common_embedding_size))
+        :add(nn.SpatialMaxPooling(1,num_selected_region))
         :add(nn.Squeeze())
         :add(nn.Dropout(0.5))
         :add(nn.Linear(common_embedding_size,noutput))
@@ -204,7 +213,7 @@ dummy_dend_state_f = {
       torch.zeros(batch_size, 2*lstm_size_q*1),
       torch.zeros(batch_size, 2*lstm_size_q*1),
 }
-batch_per_step_f = torch.LongTensor(opt.num_region):fill(batch_size)
+batch_per_step_f = torch.LongTensor(num_selected_region):fill(batch_size)
 
 if opt.gpuid >= 0 then
   print('shipped data function to cuda...')
@@ -289,7 +298,14 @@ function forward(s,e)
 
   --multimodal/criterion forward--
   local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4]);
-  local scores=multimodal_net:forward({tv_q,fv_im});
+  --fusion forward--
+  local fusion_fea=multimodal_net:forward({tv_q,fv_im});
+  init_state_f[1]:zero()
+  init_state_f[2]:zero()
+  local states_f, outputs_f = fusion_net:forward(init_state_f, fusion_fea, batch_per_step_f)
+
+  --answer/criterion forward--
+  local scores=answer_net:forward(outputs_f)
   return scores:double(),qids;
 end
 
@@ -303,7 +319,15 @@ qids=torch.LongTensor(nqs);
 for i=1,nqs,batch_size do
   xlua.progress(i, nqs)
   r=math.min(i+batch_size-1,nqs);
-  scores[{{i,r},{}}],qids[{{i,r}}]=forward(i,r);
+  if i+batch_size-1>nqs then
+    rr=nqs;
+    ii=r-batch_size+1;
+    tmpscores,tmpqids=forward(ii,rr);
+    scores[{{i,r},{}}]=tmpscores[{{i-ii+1,batch_size},{}}]
+    qids[{{i,r}}]=tmpqids[{{i-ii+1,batch_size}}]
+  else
+    scores[{{i,r},{}}],qids[{{i,r}}]=forward(i,r);
+  end
 end
 xlua.progress(nqs, nqs)
 

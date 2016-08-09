@@ -15,6 +15,12 @@ function Bilstm:__init(input_size, rnn_size, output_size, nlayer, nstep, dropout
 end
 
 
+function Bilstm:evaluate()
+    self.net:evaluate();
+    self.r_net:evaluate();
+end
+
+
 function Bilstm:parameters()
     local weight, gradWeight = self.net:parameters()
     local r_weight, r_gradWeight = self.r_net:parameters()

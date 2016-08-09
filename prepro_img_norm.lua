@@ -70,6 +70,8 @@ elseif opt.CNNmodel == 'GoogLeNet' then
     input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
 elseif opt.CNNmodel == 'VGG16' then
     input_img_name = string.format('s%d_%s_l%d_d%dx%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim,opt.num_region_width,opt.num_region_height)
+elseif opt.CNNmodel == 'VGG19R' then
+    input_img_name = string.format('s%d_%s_l%d_d%dx%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim,opt.num_region_width,opt.num_region_height)
 else
     print('CNN model name error')
 end
@@ -95,7 +97,7 @@ if opt.img_norm == 1 then
   nm[nm:eq(0)]=1e-5
   if opt.CNNmodel == 'VGG19' or opt.CNNmodel == 'GoogLeNet' then
     feat_train=torch.cdiv(feat_train, torch.repeatTensor(nm,1,nhimage)):float()
-  elseif opt.CNNmodel == 'VGG16' then
+  elseif opt.CNNmodel == 'VGG16' or opt.CNNmodel == 'VGG19R' then
     feat_train=torch.cdiv(feat_train, torch.repeatTensor(nm,1,nhimage,1,1)):float()
   end
 end
@@ -124,7 +126,7 @@ if opt.img_norm == 1 then
   nm[nm:eq(0)]=1e-5
   if opt.CNNmodel == 'VGG19' or opt.CNNmodel == 'GoogLeNet' then
     feat_test=torch.cdiv(feat_test, torch.repeatTensor(nm,1,nhimage)):float()
-  elseif opt.CNNmodel == 'VGG16' then
+  elseif opt.CNNmodel == 'VGG16' or opt.CNNmodel == 'VGG19R' then
     feat_test=torch.cdiv(feat_test, torch.repeatTensor(nm,1,nhimage,1,1)):float()
   end
 end
