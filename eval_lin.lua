@@ -22,12 +22,21 @@ cmd:text('Options')
 cmd:option('-subset', false, 'true: use subset, false: use all dataset')
 cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and test on Te, 3: train on Tr+V and test on Te-dev')
 cmd:option('-num_output', 1000, 'number of output answers')
-cmd:option('-CNNmodel', 'VGG19', 'CNN model')
+cmd:option('-CNNmodel', 'VGG19R', 'CNN model')
 cmd:option('-layer', 43, 'layer number')
-cmd:option('-num_region',196,'number of image regions')
 cmd:option('-imdim', 4096, 'image feature dimension')
+cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
+cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
+cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism')
 
 cmd:option('-out_path', 'result/', 'path to save output json file')
+
+--check point
+cmd:option('-dofinal', false, 'do evaluation on final model')
+cmd:option('-doiter', false, 'do evaluation per iteration')
+cmd:option('-max_iters', 50000, 'max number of iterations to run for')
+cmd:option('-save_checkpoint_every', 1000, 'how often to save a model checkpoint?')
+cmd:option('-checkpoint_path', 'model/', 'folder to save checkpoints')
 
 -- Model parameter settings (shoud be the same with the training)
 cmd:option('-batch_size',500,'batch_size for each iterations')
@@ -53,7 +62,6 @@ if opt.gpuid >= 0 then
   cutorch.setDevice(opt.gpuid + 1)
 end
 
-
 ------------------------------------------------------------------------
 -- Setting the parameters
 ------------------------------------------------------------------------
@@ -69,37 +77,7 @@ local dummy_output_size=1
 ------------------------------------------------------------------------
 -- Loading Dataset
 ------------------------------------------------------------------------
-local input_name
-local input_img_name
-if opt.CNNmodel == 'VGG19' then
-    input_img_name = string.format('s%d_%s_l%d_d%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim)
-elseif opt.CNNmodel == 'GoogLeNet' then
-    input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
-elseif opt.CNNmodel == 'VGG16' then
-    input_img_name = string.format('s%d_%s_l%d_d%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.imdim)
-else
-    print('CNN model name error')
-end
-if opt.subset then
-    input_name = string.format('data_prepro_sub_s%d',opt.split)
-    input_img_name = 'sub_' .. input_img_name
-else
-    input_name = string.format('data_prepro_s%d',opt.split)
-end
-local input_img_h5
-if opt.img_norm == 1 then
-  input_img_h5 = 'data_img_' .. input_img_name .. 'norm.h5'
-else
-  input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
-end
-local input_ques_h5 = input_name .. '.h5'
-local input_json = input_name .. '.json'
-local CP_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_iter%%d.t7',
-    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
-local final_model_name = string.format('model/lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d.t7',
-    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
-local result_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_results.json',
-    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
+require 'misc.autoNaming'
 
 print('DataLoader loading h5 file: ', input_json)
 local file = io.open(input_json, 'r')
@@ -136,161 +114,235 @@ buffer_size_q=dataset['question']:size()[2]
 
 --embedding: word-embedding
 embedding_net_q=nn.Sequential()
-				:add(nn.Linear(vocabulary_size_q,embedding_size_q))
-				:add(nn.Dropout(0.5))
-				:add(nn.Tanh())
+  :add(nn.Linear(vocabulary_size_q,embedding_size_q))
+  :add(nn.Dropout(0.5))
+  :add(nn.Tanh())
 --encoder: RNN body
 encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_size,nlstm_layers_q,0.5)
 
 --MULTIMODAL
 --multimodal way of combining different spaces
-multimodal_net=nn.Sequential()
-				:add(netdef.AxB(2*lstm_size_q*nlstm_layers_q,nhimage,common_embedding_size,0.5))
-				:add(nn.Dropout(0.5))
-				:add(nn.Linear(common_embedding_size,noutput))
-
---criterion
-criterion=nn.CrossEntropyCriterion()
+if opt.netmodel == 'regionmax' then
+--  multimodal_net=nn.Sequential()
+--    :add(netdef.AxBB(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+--    :add(nn.Dropout(0.5))
+--    :add(nn.Linear(common_embedding_size,noutput))
+  multimodal_net=nn.Sequential()
+    :add(netdef.Qx2DII(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region_height,opt.num_region_width,common_embedding_size,0.5))
+    :add(nn.Tanh())
+    :add(nn.SpatialMaxPooling(opt.num_region_width,opt.num_region_height))
+    :add(nn.Squeeze())
+    :add(nn.Dropout(0.5))
+    :add(nn.Linear(common_embedding_size,noutput))
+elseif opt.netmodel == 'holistic' then
+  multimodal_net=nn.Sequential()
+    :add(netdef.AxB(2*lstm_size_q*nlstm_layers_q,nhimage,common_embedding_size,0.5))
+    :add(nn.Dropout(0.5))
+    :add(nn.Linear(common_embedding_size,noutput))
+else
+  print('ERROR: netmodel is not defined: '..opt.netmodel)
+end
 
 --Optimization parameters
 dummy_state_q=torch.Tensor(lstm_size_q*nlstm_layers_q*2):fill(0)
 dummy_output_q=torch.Tensor(dummy_output_size):fill(0)
 
 if opt.gpuid >= 0 then
-	print('shipped data function to cuda...')
-	embedding_net_q = embedding_net_q:cuda()
-	encoder_net_q = encoder_net_q:cuda()
-	multimodal_net = multimodal_net:cuda()
-	criterion = criterion:cuda()
-	dummy_state_q = dummy_state_q:cuda()
-	dummy_output_q = dummy_output_q:cuda()
+  print('shipped data function to cuda...')
+  embedding_net_q = embedding_net_q:cuda()
+  encoder_net_q = encoder_net_q:cuda()
+  multimodal_net = multimodal_net:cuda()
+  dummy_state_q = dummy_state_q:cuda()
+  dummy_output_q = dummy_output_q:cuda()
 end
-
--- setting to evaluation
-embedding_net_q:evaluate();
-encoder_net_q:evaluate();
-multimodal_net:evaluate();
-
-
-embedding_w_q,embedding_dw_q=embedding_net_q:getParameters();
-encoder_w_q,encoder_dw_q=encoder_net_q:getParameters();
-multimodal_w,multimodal_dw=multimodal_net:getParameters();
-
--- loading the model
-model_param=torch.load(final_model_name);
-embedding_w_q:copy(model_param['embedding_w_q']);
-encoder_w_q:copy(model_param['encoder_w_q']);
-multimodal_w:copy(model_param['multimodal_w']);
-
-
-sizes={encoder_w_q:size(1),embedding_w_q:size(1),multimodal_w:size(1)};
 
 ------------------------------------------------------------------------
 --Grab Next Batch--
 ------------------------------------------------------------------------
 function dataset:next_batch_test(s,e)
-	local batch_size=e-s+1;
-	local qinds=torch.LongTensor(batch_size):fill(0);
-	local iminds=torch.LongTensor(batch_size):fill(0);
-	for i=1,batch_size do
-		qinds[i]=s+i-1;
-		iminds[i]=dataset['img_list'][qinds[i]];
-	end
+  local batch_size=e-s+1;
+  local qinds=torch.LongTensor(batch_size):fill(0);
+  local iminds=torch.LongTensor(batch_size):fill(0);
+  for i=1,batch_size do
+    qinds[i]=s+i-1;
+    iminds[i]=dataset['img_list'][qinds[i]];
+  end
 
-	local fv_sorted_q=sort_encoding_onehot_right_align(dataset['question']:index(1,qinds),dataset['lengths_q']:index(1,qinds),vocabulary_size_q);
+  local fv_sorted_q=sort_encoding_onehot_right_align(dataset['question']:index(1,qinds),dataset['lengths_q']:index(1,qinds),vocabulary_size_q);
 
-	local fv_im=dataset['fv_im']:index(1,iminds);
-	local qids=dataset['ques_id']:index(1,qinds);
+  local fv_im=dataset['fv_im']:index(1,iminds);
+  local qids=dataset['ques_id']:index(1,qinds);
 
-	-- ship to gpu
-	if opt.gpuid >= 0 then
-		fv_sorted_q[1]=fv_sorted_q[1]:cuda()
-		fv_sorted_q[3]=fv_sorted_q[3]:cuda()
-		fv_sorted_q[4]=fv_sorted_q[4]:cuda()
-		fv_im = fv_im:cuda()
-	end
+  -- ship to gpu
+  if opt.gpuid >= 0 then
+    fv_sorted_q[1]=fv_sorted_q[1]:cuda()
+    fv_sorted_q[3]=fv_sorted_q[3]:cuda()
+    fv_sorted_q[4]=fv_sorted_q[4]:cuda()
+    fv_im = fv_im:cuda()
+  end
 
-	--print(string.format('batch_sort:%f',timer:time().real));
-	return fv_sorted_q,fv_im:cuda(),qids,batch_size;
+  --print(string.format('batch_sort:%f',timer:time().real));
+  return fv_sorted_q,fv_im:cuda(),qids,batch_size;
 end
 
+-- duplicate the RNN
+local encoder_net_buffer_q
 ------------------------------------------------------------------------
 -- Objective Function and Optimization
 ------------------------------------------------------------------------
--- duplicate the RNN
-local encoder_net_buffer_q=dupe_rnn(encoder_net_q,buffer_size_q);
 function forward(s,e)
-	local timer = torch.Timer();
-	--grab a batch--
-	local fv_sorted_q,fv_im,qids,batch_size=dataset:next_batch_test(s,e);
-	local question_max_length=fv_sorted_q[2]:size(1);
+  local timer = torch.Timer();
+  --grab a batch--
+  local fv_sorted_q,fv_im,qids,batch_size=dataset:next_batch_test(s,e);
+  local question_max_length=fv_sorted_q[2]:size(1);
 
-	--embedding forward--
-	local word_embedding_q=split_vector(embedding_net_q:forward(fv_sorted_q[1]),fv_sorted_q[2]);
+  --embedding forward--
+  local word_embedding_q=split_vector(embedding_net_q:forward(fv_sorted_q[1]),fv_sorted_q[2]);
 
-	--encoder forward--
-	local states_q,junk2=rnn_forward(encoder_net_buffer_q,torch.repeatTensor(dummy_state_q:fill(0),batch_size,1),word_embedding_q,fv_sorted_q[2]);
+  --encoder forward--
+  local states_q,junk2=rnn_forward(encoder_net_buffer_q,torch.repeatTensor(dummy_state_q:fill(0),batch_size,1),word_embedding_q,fv_sorted_q[2]);
 
-	--multimodal/criterion forward--
-	local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4]);
-	local scores=multimodal_net:forward({tv_q,fv_im});
-	return scores:double(),qids;
+  --multimodal forward--
+  local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4]);
+  local scores=multimodal_net:forward({tv_q,fv_im});
+  return scores:double(),qids;
 end
-
-
------------------------------------------------------------------------
--- Do Prediction
------------------------------------------------------------------------
-nqs=dataset['question']:size(1);
-scores=torch.Tensor(nqs,noutput);
-qids=torch.LongTensor(nqs);
-for i=1,nqs,batch_size do
-	xlua.progress(i, nqs)
-	r=math.min(i+batch_size-1,nqs);
-	scores[{{i,r},{}}],qids[{{i,r}}]=forward(i,r);
-end
-xlua.progress(nqs, nqs)
-
-tmp,pred=torch.max(scores,2);
-
 
 ------------------------------------------------------------------------
 -- Write to Json file
 ------------------------------------------------------------------------
 function writeAll(file,data)
-    local f = io.open(file, "w")
-    f:write(data)
-    f:close()
+  local f = io.open(file, "w")
+  f:write(data)
+  f:close()
 end
 
 function saveJson(fname,t)
-	return writeAll(fname,cjson.encode(t))
+  return writeAll(fname,cjson.encode(t))
 end
 
-response={};
-for i=1,nqs do
-	table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
+
+------------------------------------------------------------------------
+-- Evaluation per Iteration
+------------------------------------------------------------------------
+if opt.doiter then
+  for iter = 1, opt.max_iters do
+    if iter%opt.save_checkpoint_every == 0 then
+      -- setting to evaluation
+      embedding_net_q:evaluate();
+      encoder_net_q:evaluate();
+      multimodal_net:evaluate();
+
+      embedding_w_q,embedding_dw_q=embedding_net_q:getParameters();
+      encoder_w_q,encoder_dw_q=encoder_net_q:getParameters();
+      multimodal_w,multimodal_dw=multimodal_net:getParameters();
+
+      model_param=torch.load(string.format(opt.checkpoint_path..'save/'..CP_name,iter))
+      embedding_w_q:copy(model_param['embedding_w_q']);
+      encoder_w_q:copy(model_param['encoder_w_q']);
+      multimodal_w:copy(model_param['multimodal_w']);
+      print("Iteration: "..iter)
+
+      -- duplicate the RNN
+      encoder_net_buffer_q=dupe_rnn(encoder_net_q,buffer_size_q);
+
+      -- Do Prediction
+      nqs=dataset['question']:size(1);
+      scores=torch.Tensor(nqs,noutput);
+      qids=torch.LongTensor(nqs);
+      for i=1,nqs,batch_size do
+        xlua.progress(i, nqs)
+        r=math.min(i+batch_size-1,nqs);
+        scores[{{i,r},{}}],qids[{{i,r}}]=forward(i,r);
+      end
+      xlua.progress(nqs, nqs)
+      tmp,pred=torch.max(scores,2);
+
+      --response={};
+      --for i=1,nqs do
+      --  table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
+      --end
+      --saveJson(opt.out_path .. 'OpenEnded_iter' .. iter .. result_name,response);
+      --print('save results in: '..opt.out_path .. 'OpenEnded_iter' .. iter .. result_name)
+
+      mc_response={};
+      for i=1,nqs do
+        local mc_prob = {}
+        local mc_idx = dataset['MC_ans_test'][i]
+        local tmp_idx = {}
+        for j=1, mc_idx:size()[1] do
+          if mc_idx[j] ~= 0 then
+            table.insert(mc_prob, scores[{i, mc_idx[j]}])
+            table.insert(tmp_idx, mc_idx[j])
+          end
+        end
+        local tmp,tmp2=torch.max(torch.Tensor(mc_prob), 1);
+        table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
+      end
+      saveJson(opt.out_path .. 'MultipleChoice_iter' .. iter .. result_name, mc_response);
+      print('save results in: '..opt.out_path .. 'MultipleChoice_iter' .. iter .. result_name)
+    end
+  end
 end
 
-paths.mkdir(opt.out_path)
-saveJson(opt.out_path .. 'OpenEnded_' .. result_name,response);
-print('save results in: '..opt.out_path .. 'OpenEnded_' .. result_name)
 
-mc_response={};
+------------------------------------------------------------------------
+-- Evaluation on Final Iteration
+------------------------------------------------------------------------
+if opt.dofinal then
+  -- setting to evaluation
+  embedding_net_q:evaluate();
+  encoder_net_q:evaluate();
+  multimodal_net:evaluate();
 
-for i=1,nqs do
-	local mc_prob = {}
-	local mc_idx = dataset['MC_ans_test'][i]
-	local tmp_idx = {}
-	for j=1, mc_idx:size()[1] do
-		if mc_idx[j] ~= 0 then
-			table.insert(mc_prob, scores[{i, mc_idx[j]}])
-			table.insert(tmp_idx, mc_idx[j])
-		end
-	end
-	local tmp,tmp2=torch.max(torch.Tensor(mc_prob), 1);
-	table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
+  embedding_w_q,embedding_dw_q=embedding_net_q:getParameters();
+  encoder_w_q,encoder_dw_q=encoder_net_q:getParameters();
+  multimodal_w,multimodal_dw=multimodal_net:getParameters();
+
+  -- loading the model
+  model_param=torch.load('model/'..final_model_name);
+  embedding_w_q:copy(model_param['embedding_w_q']);
+  encoder_w_q:copy(model_param['encoder_w_q']);
+  multimodal_w:copy(model_param['multimodal_w']);
+
+  -- duplicate the RNN
+  encoder_net_buffer_q=dupe_rnn(encoder_net_q,buffer_size_q);
+  -----------------------------------------------------------------------
+  -- Do Prediction
+  -----------------------------------------------------------------------
+  nqs=dataset['question']:size(1);
+  scores=torch.Tensor(nqs,noutput);
+  qids=torch.LongTensor(nqs);
+  for i=1,nqs,batch_size do
+    xlua.progress(i, nqs)
+    r=math.min(i+batch_size-1,nqs);
+    scores[{{i,r},{}}],qids[{{i,r}}]=forward(i,r);
+  end
+  xlua.progress(nqs, nqs)
+  tmp,pred=torch.max(scores,2);
+
+  --response={};
+  --for i=1,nqs do
+  --  table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
+  --end
+  --paths.mkdir(opt.out_path)
+  --saveJson(opt.out_path .. 'OpenEnded_' .. result_name,response);
+  --print('save results in: '..opt.out_path .. 'OpenEnded_' .. result_name)
+
+  mc_response={};
+  for i=1,nqs do
+    local mc_prob = {}
+    local mc_idx = dataset['MC_ans_test'][i]
+    local tmp_idx = {}
+    for j=1, mc_idx:size()[1] do
+      if mc_idx[j] ~= 0 then
+        table.insert(mc_prob, scores[{i, mc_idx[j]}])
+        table.insert(tmp_idx, mc_idx[j])
+      end
+    end
+    local tmp,tmp2=torch.max(torch.Tensor(mc_prob), 1);
+    table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
+  end
+  saveJson(opt.out_path .. 'MultipleChoice_' .. result_name, mc_response);
+  print('save results in: '..opt.out_path .. 'MultipleChoice_' .. result_name)
 end
-
-saveJson(opt.out_path .. 'MultipleChoice_' .. result_name, mc_response);
-print('save results in: '..opt.out_path .. 'MultipleChoice_' .. result_name)
