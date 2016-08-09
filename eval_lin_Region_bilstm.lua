@@ -37,8 +37,6 @@ cmd:option('-out_path', 'result/', 'path to save output json file')
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
-cmd:option('-imdim',512,'image feature dimension')
-cmd:option('-num_region',196,'number of image regions')
 cmd:option('-batch_size',50,'batch_size for each iterations')
 cmd:option('-max_iters', 50000, 'max number of iterations to run for ')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
@@ -50,8 +48,6 @@ cmd:option('-img_norm', 1, 'normalize the image feature. 1 = normalize, 0 = not 
 --check point
 cmd:option('-save_checkpoint_every', 1000, 'how often to save a model checkpoint?')
 cmd:option('-checkpoint_path', 'model/', 'folder to save checkpoints')
-cmd:option('-CP_name', 'lstm_s1_wct0_VGG16_d196x512_es200_rs512_rl2_cs256_bs50_o1k_sub_iter%d.t7', 'checkpoints file names')
-cmd:option('-final_model_name', 'lstm_s1_wct0_VGG16_d196x512_es200_rs512_rl2_cs256_bs50_o1k_sub.t7', 'checkpoints file names')
 
 -- misc
 cmd:option('-backend', 'cudnn', 'nn|cudnn')
@@ -90,32 +86,7 @@ dummy_output_size = 1
 ------------------------------------------------------------------------
 -- Loading Dataset
 ------------------------------------------------------------------------
-local input_name
-local input_img_name
-if opt.CNNmodel == 'VGG19' then
-    input_img_name = string.format('s%d_%s_l%d_d%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim)
-elseif opt.CNNmodel == 'GoogLeNet' then
-    input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
-elseif opt.CNNmodel == 'VGG16' then
-    input_img_name = string.format('s%d_%s_l%d_d%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.imdim)
-else
-    print('CNN model name error')
-end
-if opt.subset then
-    input_name = string.format('data_prepro_sub_s%d',opt.split)
-    input_img_name = 'sub_' .. input_img_name
-else
-    input_name = string.format('data_prepro_s%d',opt.split)
-end
-local input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
-local input_ques_h5 = input_name .. '.h5'
-local input_json = input_name .. '.json'
-local CP_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_iter%%d.t7',
-    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
-local final_model_name = string.format('model/lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d.t7',
-    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
-local result_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_results.json',
-    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
+require 'misc.autoNaming'
 
 print('DataLoader loading h5 file: ', input_json)
 file = io.open(input_json, 'r')
@@ -139,14 +110,6 @@ dataset['fv_im'] = h5_file:read('/images_test'):all()
 h5_file:close()
 
 dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
-
--- Normalize the image feature
-if opt.img_norm == 1 then
-  local nm=torch.sqrt(torch.sum(torch.cmul(dataset['fv_im'],dataset['fv_im']),3))
-  nm[nm:eq(0)]=1e-5
-  dataset['fv_im']=torch.cdiv(dataset['fv_im'],torch.repeatTensor(nm,1,1,nhimage)):float()
-end
-assert(torch.sum(dataset['fv_im']:ne(dataset['fv_im']))==0)
 
 count = 0
 for i, w in pairs(json_file['ix_to_word']) do count = count + 1 end
@@ -241,7 +204,7 @@ multimodal_w,multimodal_dw=multimodal_net:getParameters()
 fusion_w, fusion_dw = fusion_net:getParameters()
 answer_w,answer_dw=answer_net:getParameters()
 
-model_param=torch.load(final_model_name);
+model_param=torch.load('model/'..final_model_name);
 embedding_w_q:copy(model_param['embedding_w_q']);
 encoder_w_q:copy(model_param['encoder_w_q']);
 multimodal_w:copy(model_param['multimodal_w']);
@@ -252,7 +215,7 @@ sizes={encoder_w_q:size(1),embedding_w_q:size(1),multimodal_w:size(1),
        fusion_w:size(1),answer_w:size(1)}
 
 ------------------------------------------------------------------------
--- Next batch for train
+-- Next batch
 ------------------------------------------------------------------------
 function dataset:next_batch_test(s,e)
   local batch_size=e-s+1;
@@ -279,10 +242,6 @@ function dataset:next_batch_test(s,e)
   --print(string.format('batch_sort:%f',timer:time().real));
   return fv_sorted_q,fv_im:cuda(),qids,batch_size;
 end
-
-------------------------------------------------------------------------
--- Objective Function and Optimization
-------------------------------------------------------------------------
 
 -- duplicate the RNN
 encoder_net_buffer_q=dupe_rnn(encoder_net_q,buffer_size_q)

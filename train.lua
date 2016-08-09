@@ -30,7 +30,7 @@ cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decayin
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-max_iters', 150000, 'max number of iterations to run for ')
-cmd:option('-input_encoding_size', 200, 'he encoding size of each token in the vocabulary')
+cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
 cmd:option('-rnn_layer',2,'number of the rnn layer')
 cmd:option('-common_embedding_size', 1024, 'size of the common embedding vector')
