@@ -86,37 +86,7 @@ dummy_output_size = 1
 ------------------------------------------------------------------------
 -- Loading Dataset
 ------------------------------------------------------------------------
-local input_name
-local input_img_name
-if opt.CNNmodel == 'VGG19' then
-    input_img_name = string.format('s%d_%s_l%d_d%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim)
-elseif opt.CNNmodel == 'GoogLeNet' then
-    input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
-elseif opt.CNNmodel == 'VGG16' then
-    input_img_name = string.format('s%d_%s_l%d_d%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.imdim)
-else
-    print('CNN model name error')
-end
-if opt.subset then
-    input_name = string.format('data_prepro_sub_s%d',opt.split)
-    input_img_name = 'sub_' .. input_img_name
-else
-    input_name = string.format('data_prepro_s%d',opt.split)
-end
-local input_img_h5
-if opt.img_norm == 1 then
-  input_img_h5 = 'data_img_' .. input_img_name .. 'norm.h5'
-else
-  input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
-end
-local input_ques_h5 = input_name .. '.h5'
-local input_json = input_name .. '.json'
-local CP_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_iter%%d.t7',
-    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
-local final_model_name = string.format('model/lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d.t7',
-    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
-local result_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d_results.json',
-    opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
+require 'misc.autoNaming'
 
 print('DataLoader loading h5 file: ', input_json)
 file = io.open(input_json, 'r')
@@ -234,7 +204,7 @@ multimodal_w,multimodal_dw=multimodal_net:getParameters()
 fusion_w, fusion_dw = fusion_net:getParameters()
 answer_w,answer_dw=answer_net:getParameters()
 
-model_param=torch.load(final_model_name);
+model_param=torch.load('model/'..final_model_name);
 embedding_w_q:copy(model_param['embedding_w_q']);
 encoder_w_q:copy(model_param['encoder_w_q']);
 multimodal_w:copy(model_param['multimodal_w']);
