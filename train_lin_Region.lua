@@ -26,7 +26,8 @@ cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and
 cmd:option('-num_output', 1000, 'number of output answers')
 cmd:option('-CNNmodel', 'VGG16', 'CNN model')
 cmd:option('-layer', 30, 'layer number')
-cmd:option('-num_region',196,'number of image regions')
+cmd:option('-num_region_width', 14, 'number of image regions in the side of width')
+cmd:option('-num_region_height', 14, 'number of image regions in the side of heigth')
 cmd:option('-imdim', 512, 'image feature dimension')
 
 -- Model parameter settings
@@ -90,8 +91,8 @@ if opt.CNNmodel == 'VGG19' then
     input_img_name = string.format('s%d_%s_l%d_d%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim)
 elseif opt.CNNmodel == 'GoogLeNet' then
     input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
-elseif opt.CNNmodel == 'VGG16' then
-    input_img_name = string.format('s%d_%s_l%d_d%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.num_region,opt.imdim)
+elseif opt.CNNmodel == 'VGG16' or opt.CNNmodel == 'VGG19R' then
+    input_img_name = string.format('s%d_%s_l%d_d%dx%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim,opt.num_region_height,opt.num_region_width)
 else
     print('CNN model name error')
 end
@@ -162,8 +163,15 @@ encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_s
 
 --MULTIMODAL
 --multimodal way of combining different spaces
+--multimodal_net=nn.Sequential()
+--        :add(netdef.AxBB(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+--        :add(nn.Dropout(0.5))
+--        :add(nn.Linear(common_embedding_size,noutput))
 multimodal_net=nn.Sequential()
-        :add(netdef.AxBB(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+        :add(netdef.Qx2DII(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region_height,opt.num_region_width,common_embedding_size,0.5))
+        :add(nn.Tanh())
+        :add(nn.SpatialMaxPooling(opt.num_region_width,opt.num_region_height))
+        :add(nn.Squeeze())
         :add(nn.Dropout(0.5))
         :add(nn.Linear(common_embedding_size,noutput))
 

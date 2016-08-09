@@ -33,10 +33,8 @@ cmd:option('-out_path', 'result/', 'path to save output json file')
 cmd:option('-max_iters', 50000, 'max number of iterations to run for ')
 cmd:option('-save_checkpoint_every', 1000, 'how often to save a model checkpoint?')
 cmd:option('-checkpoint_path', 'model/', 'folder to save checkpoints')
-cmd:option('-CP_name', 'lstm_save_iter%d.t7', 'checkpoints file names')
 
 -- Model parameter settings (shoud be the same with the training)
-cmd:option('-imdim',4096,'image feature dimension')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
@@ -264,7 +262,7 @@ for iter = 1, opt.max_iters do
     encoder_w_q,encoder_dw_q=encoder_net_q:getParameters();
     multimodal_w,multimodal_dw=multimodal_net:getParameters();
 
-    model_param=torch.load(string.format(opt.checkpoint_path..'save/'..opt.CP_name,iter))
+    model_param=torch.load(string.format(opt.checkpoint_path..'save/'..CP_name,iter))
     embedding_w_q:copy(model_param['embedding_w_q']);
     encoder_w_q:copy(model_param['encoder_w_q']);
     multimodal_w:copy(model_param['multimodal_w']);
