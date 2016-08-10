@@ -7,7 +7,8 @@ require 'misc.netdef';
 require 'cutorch';
 require 'cunn';
 require 'hdf5';
-require 'misc.Bilstm';
+require 'misc.Zigzag';
+require 'rnn';
 cjson=require('cjson');
 LSTM=require 'misc.LSTM';
 
@@ -21,26 +22,30 @@ cmd:text('Train a Visual Question Answering model')
 cmd:text()
 cmd:text('Options')
 
+--configuration file
+cmd:option('-conf_file', '', 'configuration file path')
+
 -- Data input settings
-cmd:option('-subset', false, 'true: use subset, false: use all dataset')
+cmd:option('-subset', true, 'true: use subset, false: use all dataset')
 cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and test on Te, 3: train on Tr+V and test on Te-dev')
 cmd:option('-num_output', 1000, 'number of output answers')
-cmd:option('-CNNmodel', 'VGG16', 'CNN model')
-cmd:option('-layer', 30, 'layer number')
-cmd:option('-num_region',196,'number of image regions')
-cmd:option('-imdim', 512, 'image feature dimension')
+cmd:option('-CNNmodel', 'VGG19R', 'CNN model')
+cmd:option('-layer', 43, 'layer number')
+cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
+cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
+cmd:option('-imdim', 4096, 'image feature dimension')
 
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
-cmd:option('-batch_size',50,'batch_size for each iterations')
+cmd:option('-pooling_window_size', 2, 'size of pooling window right before bilstm')
+cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-max_iters', 50000, 'max number of iterations to run for ')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
 cmd:option('-rnn_layer',2,'number of the rnn layer')
-cmd:option('-common_embedding_size', 256, 'size of the common embedding vector')
-cmd:option('-img_norm', 1, 'normalize the image feature. 1 = normalize, 0 = not normalize')
+cmd:option('-common_embedding_size', 1024, 'size of the common embedding vector')
 
 --check point
 cmd:option('-save_checkpoint_every', 1000, 'how often to save a model checkpoint?')
@@ -52,6 +57,14 @@ cmd:option('-gpuid', 0, 'which gpu to use. -1 = use CPU')
 cmd:option('-seed', 123, 'random number generator seed to use')
 
 opt = cmd:parse(arg)
+if opt.conf_file ~= '' then
+    local conf = dofile(opt.conf_file)
+    local default_opt = cmd:default()
+    for k,v in pairs(conf) do
+        default_opt[k] = v
+    end
+    opt = default_opt
+end
 print(opt)
 
 torch.manualSeed(opt.seed)
@@ -134,28 +147,34 @@ embedding_net_q=nn.Sequential()
 encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_size,nlstm_layers_q,0.5)
 
 --multimodal way of combining different spaces
+local nhquestion = 2 * lstm_size_q * nlstm_layers_q
+local grid_height = opt.num_region_height
+local grid_width = opt.num_region_width
 multimodal_net=nn.Sequential()
-        :add(netdef.QxII(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+        :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
         :add(nn.Tanh())
-        :add(nn.SplitTable(1, 2))
+        :add(nn.Zigzag())
+        :add(nn.SplitTable(2, 2))
 
 -- correlate the multimodel features by bidirection lstm.
-fusion_net = nn.Bilstm(common_embedding_size, lstm_size_q, common_embedding_size/2, 
-                       1, opt.num_region, 0.5, opt.gpuid)
+local num_selected_region = grid_height*grid_width
+nn.FastLSTM.usenngraph = true
+cell = nn.FastLSTM(common_embedding_size, common_embedding_size/2)
+fusion_net = nn.BiSequencer(cell)
+multimodal_net:add(fusion_net)
 
 -- answer generation
 add_new_index = nn.ParallelTable()
-for i=1,opt.num_region do
+for i=1,num_selected_region do
     add_new_index:add(nn.Reshape(1, common_embedding_size))
 end
-answer_net=nn.Sequential()
-        :add(add_new_index)
-        :add(nn.JoinTable(1, 2))
-        :add(nn.Reshape(1,opt.num_region,common_embedding_size))
-        :add(nn.SpatialMaxPooling(1,opt.num_region))
-        :add(nn.Squeeze())
-        :add(nn.Dropout(0.5))
-        :add(nn.Linear(common_embedding_size,noutput))
+multimodal_net:add(add_new_index)
+              :add(nn.JoinTable(1, 2))
+              :add(nn.Reshape(1, num_selected_region, common_embedding_size))
+              :add(nn.SpatialMaxPooling(1, num_selected_region))
+              :add(nn.Squeeze())
+              :add(nn.Dropout(0.5))
+              :add(nn.Linear(common_embedding_size, noutput))
 
 --criterion
 criterion=nn.CrossEntropyCriterion()
@@ -164,29 +183,14 @@ criterion=nn.CrossEntropyCriterion()
 dummy_state_q=torch.Tensor(lstm_size_q*nlstm_layers_q*2):fill(0)
 dummy_output_q=torch.Tensor(dummy_output_size):fill(0)
 
-init_state_f = {
-      torch.zeros(batch_size, 2*lstm_size_q*1),
-      torch.zeros(batch_size, 2*lstm_size_q*1),
-}
-dummy_dend_state_f = {
-      torch.zeros(batch_size, 2*lstm_size_q*1),
-      torch.zeros(batch_size, 2*lstm_size_q*1),
-}
-batch_per_step_f = torch.LongTensor(opt.num_region):fill(batch_size)
-
 if opt.gpuid >= 0 then
   print('shipped data function to cuda...')
   embedding_net_q = embedding_net_q:cuda()
   encoder_net_q = encoder_net_q:cuda()
   multimodal_net = multimodal_net:cuda()
-  answer_net = answer_net:cuda()
   criterion = criterion:cuda()
   dummy_state_q = dummy_state_q:cuda()
   dummy_output_q = dummy_output_q:cuda()
-  init_state_f[1] = init_state_f[1]:cuda()
-  init_state_f[2] = init_state_f[2]:cuda()
-  dummy_dend_state_f[1] = dummy_dend_state_f[1]:cuda()
-  dummy_dend_state_f[2] = dummy_dend_state_f[2]:cuda()
 end
 
 --Processings
@@ -199,14 +203,7 @@ encoder_w_q:uniform(-0.08, 0.08);
 multimodal_w,multimodal_dw=multimodal_net:getParameters()
 multimodal_w:uniform(-0.08, 0.08);
 
-fusion_w, fusion_dw = fusion_net:getParameters()
-fusion_w:uniform(-0.08, 0.08);
-
-answer_w,answer_dw=answer_net:getParameters()
-answer_w:uniform(-0.08, 0.08);
-
-sizes={encoder_w_q:size(1),embedding_w_q:size(1),multimodal_w:size(1),
-       fusion_w:size(1),answer_w:size(1)}
+sizes={encoder_w_q:size(1),embedding_w_q:size(1),multimodal_w:size(1)}
 
 
 -- optimization parameter
@@ -215,7 +212,7 @@ optimize.maxIter=opt.max_iters
 optimize.learningRate=opt.learning_rate
 optimize.update_grad_per_n_batches=1
 
-optimize.winit=join_vector({encoder_w_q,embedding_w_q,multimodal_w,fusion_w,answer_w})
+optimize.winit=join_vector({encoder_w_q,embedding_w_q,multimodal_w,})
 
 
 ------------------------------------------------------------------------
@@ -272,10 +269,6 @@ function JdJ(x)
   if multimodal_w~=params[3] then
     multimodal_w:copy(params[3])
   end
-  fusion_net:updateParameters(params[4])
-  if answer_w~=params[5] then
-    answer_w:copy(params[5])
-  end
 
   --clear gradients--
   for i=1,buffer_size_q do
@@ -283,8 +276,6 @@ function JdJ(x)
   end
   embedding_dw_q:zero()
   multimodal_dw:zero()
-  fusion_net:zeroGradParameters()
-  answer_dw:zero()
 
   --grab a batch--
   local fv_sorted_q,fv_im,labels,batch_size=dataset:next_batch()
@@ -298,28 +289,12 @@ function JdJ(x)
 
   --multimodal forward--
   local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4])
-
-  --fusion forward--
-  local fusion_fea=multimodal_net:forward({tv_q,fv_im})
-  init_state_f[1]:zero()
-  init_state_f[2]:zero()
-  local states_f, outputs_f = fusion_net:forward(init_state_f, fusion_fea, batch_per_step_f)
-
-  --answer/criterion forward--
-  local scores=answer_net:forward(outputs_f)
+  local scores=multimodal_net:forward({tv_q,fv_im})
   local f=criterion:forward(scores,labels)
 
-  --answer/creterion backward--
+  --multimodal/creterion backward--
   local dscores=criterion:backward(scores,labels)
-  local doutputs_f=answer_net:backward(outputs_f,dscores)
-
-  --fusion backward--
-  dummy_dend_state_f[1]:zero()
-  dummy_dend_state_f[2]:zero()
-  local _, dfusion_fea = fusion_net:backward(dummy_dend_state_f, doutputs_f, states_f, fusion_fea, batch_per_step_f)
-
-  --multimodal backward--
-  local tmp=multimodal_net:backward({tv_q,fv_im},dfusion_fea)
+  local tmp=multimodal_net:backward({tv_q,fv_im},dscores)
   local dtv_q=tmp[1]:index(1,fv_sorted_q[3])
 
   --encoder backward--
@@ -363,9 +338,7 @@ for iter = 1, opt.max_iters do
   end
   optim.rmsprop(JdJ, optimize.winit, optimize, state)
   optimize.learningRate=optimize.learningRate*decay_factor
-  if opt.learning_rate_decay_start>0 and iter>opt.learning_rate_decay_start and iter%opt.learning_rate_decay_every==0 then
-    optimize.learningRate = optimize.learningRate*0.5
-  end
+  fusion_net:forget()
   if iter%50 == 0 then -- change this to smaller value if out of the memory
     collectgarbage()
   end

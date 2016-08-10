@@ -241,7 +241,6 @@ def main(params):
     print 'wrote ', params['output_json']
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
 
     # input json
