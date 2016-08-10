@@ -1,14 +1,16 @@
 -- Modified by Yuetan Lin (2016/06/18 22:06)
-require 'nn'
-require 'torch'
-require 'nngraph'
-require 'optim'
-require 'misc.netdef'
-require 'cutorch'
-require 'cunn'
-require 'hdf5'
-cjson=require('cjson')
-LSTM=require 'misc.LSTM'
+require 'nn';
+require 'torch';
+require 'nngraph';
+require 'optim';
+require 'misc.netdef';
+require 'cutorch';
+require 'cunn';
+require 'hdf5';
+cjson=require('cjson');
+LSTM=require 'misc.LSTM';
+require 'misc.Zigzag';
+require 'rnn';
 
 -------------------------------------------------------------------------------
 -- Input arguments and options
@@ -19,6 +21,9 @@ cmd:text('Train a Visual Question Answering model')
 cmd:text()
 cmd:text('Options')
 
+-- Configuration file
+cmd:option('-conf_file', '', 'configuration file path')
+
 -- Data input settings
 cmd:option('-subset', false, 'true: use subset, false: use all dataset')
 cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and test on Te, 3: train on Tr+V and test on Te-dev')
@@ -28,7 +33,7 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism|regionmaxQ')
+cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilstm|regionmaxQ|regionbilstmQ')
 
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
@@ -36,7 +41,7 @@ cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decayin
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
 cmd:option('-optim_method', 'rmsprop', 'adadelta|rmsprop')
 cmd:option('-batch_size',500,'batch_size for each iterations')
-cmd:option('-max_iters', 150000, 'max number of iterations to run for ')
+cmd:option('-max_iters', 50000, 'max number of iterations to run for ')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
 cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each layer')
 cmd:option('-rnn_layer',2,'number of the rnn layer')
@@ -44,7 +49,7 @@ cmd:option('-common_embedding_size', 1024, 'size of the common embedding vector'
 cmd:option('-img_norm', 1, 'normalize the image feature. 1 = normalize, 0 = not normalize')
 
 --check point
-cmd:option('-save_checkpoint_every', 25000, 'how often to save a model checkpoint?')
+cmd:option('-save_checkpoint_every', 1000, 'how often to save a model checkpoint?')
 cmd:option('-checkpoint_path', 'model/', 'folder to save checkpoints')
 
 -- misc
@@ -53,6 +58,14 @@ cmd:option('-gpuid', 0, 'which gpu to use. -1 = use CPU')
 cmd:option('-seed', 123, 'random number generator seed to use')
 
 opt = cmd:parse(arg)
+if opt.conf_file ~= '' then
+  local conf = dofile(opt.conf_file)
+  local default_opt = cmd:default()
+  for k,v in pairs(conf) do
+    default_opt[k] = v
+  end
+  opt = default_opt
+end
 print(opt)
 
 torch.manualSeed(opt.seed)
@@ -113,8 +126,7 @@ dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
 local count = 0
 for i, w in pairs(json_file['ix_to_word']) do count = count + 1 end
 local vocabulary_size_q=count
-
-collectgarbage()
+collectgarbage();
 
 ------------------------------------------------------------------------
 --Design Parameters and Network Definitions
@@ -127,32 +139,59 @@ buffer_size_q=dataset['question']:size()[2]
 --VQA
 --embedding: word-embedding
 embedding_net_q=nn.Sequential()
-        :add(nn.Linear(vocabulary_size_q,embedding_size_q))
-        :add(nn.Dropout(0.5))
-        :add(nn.Tanh())
+  :add(nn.Linear(vocabulary_size_q,embedding_size_q))
+  :add(nn.Dropout(0.5))
+  :add(nn.Tanh())
 
 --encoder: RNN body
 encoder_net_q=LSTM.lstm_conventional(embedding_size_q,lstm_size_q,dummy_output_size,nlstm_layers_q,0.5)
 
 --MULTIMODAL
 --multimodal way of combining different spaces
-if opt.netmodel == 'regionmax' then
+local nhquestion = 2 * lstm_size_q * nlstm_layers_q
+local grid_height = opt.num_region_height
+local grid_width = opt.num_region_width
+if opt.netmodel == 'holistic' then
+  multimodal_net=nn.Sequential()
+    :add(netdef.AxB(nhquestion,nhimage,common_embedding_size,0.5))
+    :add(nn.Dropout(0.5))
+    :add(nn.Linear(common_embedding_size,noutput))
+elseif opt.netmodel == 'regionmax' then
 --  multimodal_net=nn.Sequential()
---    :add(netdef.AxBB(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region,common_embedding_size,0.5))
+--    :add(netdef.AxBB(nhquestion,nhimage,opt.num_region,common_embedding_size,0.5))
 --    :add(nn.Dropout(0.5))
 --    :add(nn.Linear(common_embedding_size,noutput))
   multimodal_net=nn.Sequential()
-    :add(netdef.Qx2DII(2*lstm_size_q*nlstm_layers_q,nhimage,opt.num_region_height,opt.num_region_width,common_embedding_size,0.5))
+    :add(netdef.Qx2DII(nhquestion,nhimage,grid_height,grid_width,common_embedding_size,0.5))
     :add(nn.Tanh())
-    :add(nn.SpatialMaxPooling(opt.num_region_width,opt.num_region_height))
+    :add(nn.SpatialMaxPooling(grid_width,grid_height))
     :add(nn.Squeeze())
     :add(nn.Dropout(0.5))
     :add(nn.Linear(common_embedding_size,noutput))
-elseif opt.netmodel == 'holistic' then
+elseif opt.netmodel == 'regionbilstm' then
   multimodal_net=nn.Sequential()
-    :add(netdef.AxB(2*lstm_size_q*nlstm_layers_q,nhimage,common_embedding_size,0.5))
+    :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
+    :add(nn.Tanh())
+    :add(nn.Zigzag())
+    :add(nn.SplitTable(2, 2))
+  -- correlate the multimodel features by bidirection lstm.
+  local num_selected_region = grid_height*grid_width
+  nn.FastLSTM.usenngraph = true
+  cell = nn.FastLSTM(common_embedding_size, common_embedding_size/2)
+  fusion_net = nn.BiSequencer(cell)
+  multimodal_net:add(fusion_net)
+  -- answer generation
+  add_new_index = nn.ParallelTable()
+  for i=1,num_selected_region do
+    add_new_index:add(nn.Reshape(1, common_embedding_size))
+  end
+  multimodal_net:add(add_new_index)
+    :add(nn.JoinTable(1, 2))
+    :add(nn.Reshape(1, num_selected_region, common_embedding_size))
+    :add(nn.SpatialMaxPooling(1, num_selected_region))
+    :add(nn.Squeeze())
     :add(nn.Dropout(0.5))
-    :add(nn.Linear(common_embedding_size,noutput))
+    :add(nn.Linear(common_embedding_size, noutput))
 else
   print('ERROR: netmodel is not defined: '..opt.netmodel)
 end
@@ -176,13 +215,13 @@ end
 
 --Processings
 embedding_w_q,embedding_dw_q=embedding_net_q:getParameters()
-embedding_w_q:uniform(-0.08, 0.08)
+embedding_w_q:uniform(-0.08, 0.08);
 
 encoder_w_q,encoder_dw_q=encoder_net_q:getParameters()
-encoder_w_q:uniform(-0.08, 0.08)
+encoder_w_q:uniform(-0.08, 0.08);
 
 multimodal_w,multimodal_dw=multimodal_net:getParameters()
-multimodal_w:uniform(-0.08, 0.08)
+multimodal_w:uniform(-0.08, 0.08);
 
 sizes={encoder_w_q:size(1),embedding_w_q:size(1),multimodal_w:size(1)}
 
@@ -324,6 +363,9 @@ for iter = 1, opt.max_iters do
   optimize.learningRate=optimize.learningRate*decay_factor
   if opt.learning_rate_decay_start>0 and iter>opt.learning_rate_decay_start and iter%opt.learning_rate_decay_every==0 then
     optimize.learningRate = optimize.learningRate*0.5
+  end
+  if opt.netmodel == 'regionbilstm' then
+    fusion_net:forget()
   end
   if iter%50 == 0 then -- change this to smaller value if out of the memory
     collectgarbage()
