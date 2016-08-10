@@ -23,8 +23,9 @@ if opt.img_norm == 1 then
 else
   input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
 end
-input_ques_h5 = input_name .. '.h5'
-input_json = input_name .. '.json'
+input_img_h5 = 'data/' .. input_img_h5
+input_ques_h5 = 'data/' .. input_name .. '.h5'
+input_json = 'data/' .. input_name .. '.json'
 CP_name = param_name..'_iter%d.t7'
 final_model_name = param_name..'.t7'
 result_name = param_name..'_results.json'

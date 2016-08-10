@@ -88,11 +88,11 @@ end
 local input_json
 local out_name
 if opt.subset then
-    input_json = string.format('data_prepro_sub_s%d.json',opt.split)
-    out_name = string.format('data_img_sub_s%d_%s_d%d.h5',opt.split,opt.CNNmodel,opt.dim)
+    input_json = string.format('data/data_prepro_sub_s%d.json',opt.split)
+    out_name = string.format('data/data_img_sub_s%d_%s_d%d.h5',opt.split,opt.CNNmodel,opt.dim)
 else
-    input_json = string.format('data_prepro_s%d.json',opt.split)
-    out_name = string.format('data_img_s%d_%s_d%d.h5',opt.split,opt.CNNmodel,opt.dim)
+    input_json = string.format('data/data_prepro_s%d.json',opt.split)
+    out_name = string.format('data/data_img_s%d_%s_d%d.h5',opt.split,opt.CNNmodel,opt.dim)
 end
 
 -- open the json file

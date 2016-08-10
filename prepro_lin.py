@@ -178,11 +178,11 @@ def main(params):
 
     input_train_json = 'data/vqa_raw_s%d_train.json'%params['split']
     input_test_json = 'data/vqa_raw_s%d_test.json'%params['split']
-    output_name = 'data_prepro_s%d'%params['split']
+    output_name = 'data/data_prepro_s%d'%params['split']
     if params['subset'] == 'True':
         input_train_json = 'data/vqa_raw_sub_s%d_train.json'%params['split']
         input_test_json = 'data/vqa_raw_sub_s%d_test.json'%params['split']
-        output_name = 'data_prepro_sub_s%d'%params['split']
+        output_name = 'data/data_prepro_sub_s%d'%params['split']
 
     imgs_train = json.load(open(input_train_json, 'r'))
     imgs_test = json.load(open(input_test_json, 'r'))

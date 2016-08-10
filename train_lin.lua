@@ -13,7 +13,6 @@ LSTM=require 'misc.LSTM'
 -------------------------------------------------------------------------------
 -- Input arguments and options
 -------------------------------------------------------------------------------
-
 cmd = torch.CmdLine()
 cmd:text()
 cmd:text('Train a Visual Question Answering model')
@@ -29,12 +28,13 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism')
+cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism|regionmaxQ')
 
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
+cmd:option('-optim_method', 'rmsprop', 'adadelta|rmsprop')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-max_iters', 150000, 'max number of iterations to run for ')
 cmd:option('-input_encoding_size', 200, 'the encoding size of each token in the vocabulary')
@@ -70,7 +70,6 @@ end
 ------------------------------------------------------------------------
 -- Setting the parameters
 ------------------------------------------------------------------------
-
 local model_path = opt.checkpoint_path
 local batch_size=opt.batch_size
 local embedding_size_q=opt.input_encoding_size
@@ -81,6 +80,7 @@ local common_embedding_size=opt.common_embedding_size
 local noutput=opt.num_output
 local dummy_output_size=1
 local decay_factor = 0.99997592083 -- 50000
+local optim_method = opt.optim_method
 paths.mkdir(model_path)
 
 ------------------------------------------------------------------------
@@ -192,7 +192,6 @@ local optimize={}
 optimize.maxIter=opt.max_iters
 optimize.learningRate=opt.learning_rate
 optimize.update_grad_per_n_batches=1
-
 optimize.winit=join_vector({encoder_w_q,embedding_w_q,multimodal_w})
 
 
@@ -316,7 +315,11 @@ for iter = 1, opt.max_iters do
   if iter%100 == 0 then
     print('training loss: ' .. running_avg, 'on iter: ' .. iter .. '/' .. opt.max_iters)
   end
-  optim.rmsprop(JdJ, optimize.winit, optimize, state)
+  if optim_method == 'rmsprop' then
+    optim.rmsprop(JdJ, optimize.winit, optimize, state)
+  elseif optim_method == 'adadelta' then
+    optim.adadelta(JdJ, optimize.winit, optimize, state)
+  end
 
   optimize.learningRate=optimize.learningRate*decay_factor
   if opt.learning_rate_decay_start>0 and iter>opt.learning_rate_decay_start and iter%opt.learning_rate_decay_every==0 then

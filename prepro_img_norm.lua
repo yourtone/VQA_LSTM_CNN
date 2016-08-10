@@ -76,8 +76,8 @@ end
 if opt.subset then
     input_img_name = 'sub_' .. input_img_name
 end
-input_img_h5 = 'data_img_' .. input_img_name .. '.h5'
-output_img_h5 = 'data_img_' .. input_img_name .. 'norm.h5'
+input_img_h5 = 'data/data_img_' .. input_img_name .. '.h5'
+output_img_h5 = 'data/data_img_' .. input_img_name .. 'norm.h5'
 
 print('Loading: ', input_img_h5)
 -------------------------------------
