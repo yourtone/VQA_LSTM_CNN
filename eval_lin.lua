@@ -32,13 +32,14 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilstm|regionmaxQ|regionbilstmQ')
+cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism|regionmaxQ|regionbilismQ|regionsalient')
 
 cmd:option('-out_path', 'result/', 'path to save output json file')
 
 --check point
 cmd:option('-dofinal', false, 'do evaluation on final model')
 cmd:option('-doiter', false, 'do evaluation per iteration')
+cmd:option('-dotrain', false, 'do evaluation on training set')
 cmd:option('-eval_start_iter', 1, 'evaluation start iteration')
 cmd:option('-max_iters', 50000, 'max number of iterations to run for')
 cmd:option('-save_checkpoint_every', 1000, 'how often to save a model checkpoint?')
@@ -99,26 +100,33 @@ local text = file:read()
 file:close()
 json_file = cjson.decode(text)
 
-print('DataLoader loading h5 file: ', input_ques_h5)
-local dataset = {}
-local h5_file = hdf5.open(input_ques_h5, 'r')
-dataset['question'] = h5_file:read('/ques_test'):all()
-dataset['lengths_q'] = h5_file:read('/ques_length_test'):all()
-dataset['img_list'] = h5_file:read('/img_pos_test'):all()
-dataset['ques_id'] = h5_file:read('/question_id_test'):all()
-dataset['MC_ans_test'] = h5_file:read('/MC_ans_test'):all()
-h5_file:close()
-
-print('DataLoader loading h5 file: ', input_img_h5)
-local h5_file = hdf5.open(input_img_h5, 'r')
-dataset['fv_im'] = h5_file:read('/images_test'):all()
-h5_file:close()
-
-dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
-
 local count = 0
 for i, w in pairs(json_file['ix_to_word']) do count = count + 1 end
 local vocabulary_size_q=count
+
+if opt.dotrain then
+  choice = 'train'
+else
+  choice = 'test'
+end
+-- train/test ques
+print('DataLoader loading h5 file: ', input_ques_h5)
+local dataset = {}
+local h5_file = hdf5.open(input_ques_h5, 'r')
+dataset['question'] = h5_file:read('/ques_'..choice):all()
+dataset['lengths_q'] = h5_file:read('/ques_length_'..choice):all()
+dataset['img_list'] = h5_file:read('/img_pos_'..choice):all()
+dataset['ques_id'] = h5_file:read('/question_id_'..choice):all()
+dataset['MC_ans_'..choice] = h5_file:read('/MC_ans_'..choice):all()
+h5_file:close()
+
+-- train/test image
+print('DataLoader loading h5 file: ', input_img_h5)
+local h5_file = hdf5.open(input_img_h5, 'r')
+dataset['fv_im'] = h5_file:read('/images_'..choice):all()
+h5_file:close()
+
+dataset['question'] = right_align(dataset['question'],dataset['lengths_q'])
 collectgarbage();
 
 ------------------------------------------------------------------------
@@ -151,7 +159,7 @@ elseif opt.netmodel == 'regionmax' then
 --    :add(nn.Dropout(0.5))
 --    :add(nn.Linear(common_embedding_size,noutput))
   multimodal_net=nn.Sequential()
-    :add(netdef.Qx2DII(nhquestion,nhimage,grid_height,grid_width,common_embedding_size,0.5))
+    :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
     :add(nn.Tanh())
     :add(nn.SpatialMaxPooling(grid_width,grid_height))
     :add(nn.Squeeze())
@@ -181,6 +189,17 @@ elseif opt.netmodel == 'regionbilstm' then
     :add(nn.Squeeze())
     :add(nn.Dropout(0.5))
     :add(nn.Linear(common_embedding_size, noutput))
+elseif opt.netmodel == 'regionsalient' then
+    multimodal_net=nn.Sequential()
+      :add(nn.ParallelTable()
+             :add(nn.Identity())
+             :add(netdef.attend(nhimage, grid_height, grid_width)))
+      :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
+      :add(nn.Tanh())
+      :add(nn.SpatialMaxPooling(grid_width, grid_height))
+      :add(nn.Squeeze())
+      :add(nn.Dropout(0.5))
+      :add(nn.Linear(common_embedding_size, noutput))
 else
   print('ERROR: netmodel is not defined: '..opt.netmodel)
 end
@@ -201,7 +220,7 @@ end
 ------------------------------------------------------------------------
 --Grab Next Batch--
 ------------------------------------------------------------------------
-function dataset:next_batch_test(s,e)
+function dataset:next_batch_eval(s,e)
   local batch_size=e-s+1;
   local qinds=torch.LongTensor(batch_size):fill(0);
   local iminds=torch.LongTensor(batch_size):fill(0);
@@ -235,7 +254,7 @@ local encoder_net_buffer_q
 function forward(s,e)
   local timer = torch.Timer();
   --grab a batch--
-  local fv_sorted_q,fv_im,qids,batch_size=dataset:next_batch_test(s,e);
+  local fv_sorted_q,fv_im,qids,batch_size=dataset:next_batch_eval(s,e);
   local question_max_length=fv_sorted_q[2]:size(1);
 
   --embedding forward--
@@ -265,7 +284,6 @@ end
 function saveJson(fname,t)
   return writeAll(fname,cjson.encode(t))
 end
-
 
 ------------------------------------------------------------------------
 -- Evaluation per Iteration
@@ -316,7 +334,7 @@ if opt.doiter then
       mc_response={};
       for i=1,nqs do
         local mc_prob = {}
-        local mc_idx = dataset['MC_ans_test'][i]
+        local mc_idx = dataset['MC_ans_'..choice][i]
         local tmp_idx = {}
         for j=1, mc_idx:size()[1] do
           if mc_idx[j] ~= 0 then
@@ -383,7 +401,7 @@ if opt.dofinal then
   mc_response={};
   for i=1,nqs do
     local mc_prob = {}
-    local mc_idx = dataset['MC_ans_test'][i]
+    local mc_idx = dataset['MC_ans_'..choice][i]
     local tmp_idx = {}
     for j=1, mc_idx:size()[1] do
       if mc_idx[j] ~= 0 then

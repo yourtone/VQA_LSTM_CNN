@@ -306,6 +306,9 @@ function JdJ(x)
   end
   embedding_dw_q:zero()
   multimodal_dw:zero()
+  if opt.netmodel == 'regionbilstm' then
+    fusion_net:forget()
+  end
 
   --grab a batch--
   local fv_sorted_q,fv_im,labels,batch_size=dataset:next_batch()
@@ -374,9 +377,6 @@ for iter = 1, opt.max_iters do
   optimize.learningRate=optimize.learningRate*decay_factor
   if opt.learning_rate_decay_start>0 and iter>opt.learning_rate_decay_start and iter%opt.learning_rate_decay_every==0 then
     optimize.learningRate = optimize.learningRate*0.5
-  end
-  if opt.netmodel == 'regionbilstm' then
-      fusion_net:forget()
   end
   if iter%50 == 0 then -- change this to smaller value if out of the memory
     collectgarbage()
