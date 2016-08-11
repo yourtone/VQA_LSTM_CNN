@@ -219,6 +219,7 @@ def main(params):
 
     # get the answer encoding.
     A = encode_answer(imgs_train, atoi)
+    MC_ans_train = encode_mc_answer(imgs_train, atoi)
     MC_ans_test = encode_mc_answer(imgs_test, atoi)
 
     # create output h5 file for training set.
@@ -230,6 +231,7 @@ def main(params):
     f.create_dataset("answers", dtype='uint32', data=A)
     f.create_dataset("question_id_train", dtype='uint32', data=question_id_train)
     f.create_dataset("img_pos_train", dtype='uint32', data=img_pos_train)
+    f.create_dataset("MC_ans_train", dtype='uint32', data=MC_ans_train)
     
     f.create_dataset("ques_test", dtype='uint32', data=ques_test)
     f.create_dataset("ques_length_test", dtype='uint32', data=ques_length_test)
