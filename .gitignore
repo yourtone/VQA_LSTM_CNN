@@ -8,6 +8,7 @@ data/train2014
 data/val2014/
 data/val2014
 model/
+filtered.txt
 
 # copy file from https://github.com/github/gitignore/blob/master/Lua.gitignore
 
