@@ -7,7 +7,6 @@ require 'misc.netdef';
 require 'cutorch';
 require 'cunn';
 require 'hdf5';
-require 'misc.Bilstm';
 require 'misc.Zigzag';
 cjson=require('cjson');
 LSTM=require 'misc.LSTM';

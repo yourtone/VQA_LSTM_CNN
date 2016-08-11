@@ -32,7 +32,7 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism|regionmaxQ|regionbilismQ')
+cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilstm|regionmaxQ|regionbilstmQ')
 
 cmd:option('-out_path', 'result/', 'path to save output json file')
 
@@ -157,7 +157,7 @@ elseif opt.netmodel == 'regionmax' then
     :add(nn.Squeeze())
     :add(nn.Dropout(0.5))
     :add(nn.Linear(common_embedding_size,noutput))
-elseif opt.netmodel == 'regionbilism' then
+elseif opt.netmodel == 'regionbilstm' then
   multimodal_net=nn.Sequential()
     :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
     :add(nn.Tanh())
@@ -247,7 +247,7 @@ function forward(s,e)
   --multimodal forward--
   local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4]);
   local scores=multimodal_net:forward({tv_q,fv_im});
-  if opt.netmodel == 'regionbilism' then
+  if opt.netmodel == 'regionbilstm' then
     fusion_net:forget()
   end
   return scores:double(),qids;
@@ -277,7 +277,7 @@ if opt.doiter then
       embedding_net_q:evaluate();
       encoder_net_q:evaluate();
       multimodal_net:evaluate();
-      if opt.netmodel == 'regionbilism' then
+      if opt.netmodel == 'regionbilstm' then
         cell:evaluate();
       end
 
@@ -342,7 +342,7 @@ if opt.dofinal then
   embedding_net_q:evaluate();
   encoder_net_q:evaluate();
   multimodal_net:evaluate();
-  if opt.netmodel == 'regionbilism' then
+  if opt.netmodel == 'regionbilstm' then
     cell:evaluate();
   end
 

@@ -33,7 +33,7 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism|regionmaxQ|regionbilismQ')
+cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism|regionmaxQ|regionbilismQ|regionsalient')
 
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
@@ -168,7 +168,7 @@ elseif opt.netmodel == 'regionmax' then
     :add(nn.Squeeze())
     :add(nn.Dropout(0.5))
     :add(nn.Linear(common_embedding_size,noutput))
-elseif opt.netmodel == 'regionbilism' then
+elseif opt.netmodel == 'regionbilstm' then
   multimodal_net=nn.Sequential()
     :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
     :add(nn.Tanh())
@@ -192,6 +192,17 @@ elseif opt.netmodel == 'regionbilism' then
     :add(nn.Squeeze())
     :add(nn.Dropout(0.5))
     :add(nn.Linear(common_embedding_size, noutput))
+elseif opt.netmodel == 'regionsalient' then
+    multimodal_net=nn.Sequential()
+      :add(nn.ParallelTable()
+             :add(nn.Identity())
+             :add(netdef.attend(nhimage, grid_height, grid_width)))
+      :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
+      :add(nn.Tanh())
+      :add(nn.SpatialMaxPooling(grid_width, grid_height))
+      :add(nn.Squeeze())
+      :add(nn.Dropout(0.5))
+      :add(nn.Linear(common_embedding_size, noutput))
 else
   print('ERROR: netmodel is not defined: '..opt.netmodel)
 end
@@ -364,7 +375,9 @@ for iter = 1, opt.max_iters do
   if opt.learning_rate_decay_start>0 and iter>opt.learning_rate_decay_start and iter%opt.learning_rate_decay_every==0 then
     optimize.learningRate = optimize.learningRate*0.5
   end
-  fusion_net:forget()
+  if opt.netmodel == 'regionbilstm' then
+      fusion_net:forget()
+  end
   if iter%50 == 0 then -- change this to smaller value if out of the memory
     collectgarbage()
   end
