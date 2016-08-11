@@ -1,4 +1,5 @@
 require 'nn'
+require 'rnn'
 require 'nngraph'
 
 netdef={};
@@ -62,6 +63,30 @@ function netdef.Qx2DII(nhA, nhB, hB, wB, nhcommon, dropout)
     qc = nn.Reshape(nhcommon, hB, wB)(nn.Replicate(hB*wB, 2, 1)(qc))
     local output = nn.CMulTable()({qc, ic})
     return nn.gModule({q, i}, {output})
+end
+
+function netdef.attend(nhimage, gridH, gridW) 
+    -- input image feature: bs x nhimage x gridH x gridW, output shape is the same as input.
+    local flat_feature = nn.Sequential()
+    flat_feature:add(nn.Reshape(nhimage, gridH*gridW))
+                :add(nn.Transpose({2, 3}))
+
+    local get_weight = nn.Sequential()
+    get_weight:add(flat_feature)
+              :add(nn.SeqBRNN(nhimage, 1, true))
+              :add(nn.Squeeze(2, 2))
+              :add(nn.SoftMax())
+              :add(nn.Replicate(nhimage, 2, 1))
+
+    local attend = nn.Sequential()
+    attend:add(nn.ConcatTable()
+                  :add(get_weight)
+                  :add(flat_feature))
+          :add(nn.CMulTable())
+          :add(nn.Transpose({2, 3}))
+          :add(nn.Reshape(nhimage, gridH, gridW))
+
+    return attend
 end
 
 return netdef;
