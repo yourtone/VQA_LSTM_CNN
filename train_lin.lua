@@ -39,6 +39,7 @@ cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilstm|regionmaxQ
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
+cmd:option('-weightdecay', 5e-4, 'weight decay')
 cmd:option('-optim_method', 'rmsprop', 'adadelta|rmsprop')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-max_iters', 50000, 'max number of iterations to run for ')
@@ -242,6 +243,7 @@ local optimize={}
 optimize.maxIter=opt.max_iters
 optimize.learningRate=opt.learning_rate
 optimize.update_grad_per_n_batches=1
+optimize.weightDecay = opt.weightdecay
 optimize.winit=join_vector({encoder_w_q,embedding_w_q,multimodal_w})
 
 
