@@ -32,7 +32,7 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilstm|regionmaxQ|regionbilstmQ|regionsalient')
+cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism|regionmaxQ|regionbilismQ|regionsalient|rsconcat')
 
 cmd:option('-out_path', 'result/', 'path to save output json file')
 
@@ -200,6 +200,18 @@ elseif opt.netmodel == 'regionsalient' then
       :add(nn.Squeeze())
       :add(nn.Dropout(0.5))
       :add(nn.Linear(common_embedding_size, noutput))
+elseif opt.netmodel == 'rsconcat' then
+    q = nn.Identity()()
+    i = nn.Identity()()
+    salient_i = netdef.attend(nhimage, grid_height, grid_width)(i)
+    mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)({q, salient_i})
+    fusion_fea = nn.Dropout(0.5)(
+                   nn.Squeeze()(
+                     nn.SpatialMaxPooling(grid_width, grid_height)(
+                       nn.Tanh()(mul_fea))))
+    concat_fea = nn.JoinTable(1, 1)({fusion_fea, q})
+    scores = nn.Linear(common_embedding_size + nhquestion, noutput)(concat_fea)
+    multimodal_net = nn.gModule({q, i}, {scores})
 else
   print('ERROR: netmodel is not defined: '..opt.netmodel)
 end
