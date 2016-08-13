@@ -144,12 +144,14 @@ def encode_mc_answer(imgs, atoi):
         for j, ans in enumerate(img['MC_ans']):
             mc_ans_arrays[i,j] = atoi.get(ans, 0)
     return mc_ans_arrays
-
+ff=open('filtered.txt','w')
 def filter_question(imgs, atoi):
     new_imgs = []
     for i, img in enumerate(imgs):
         if atoi.get(img['ans'],len(atoi)+1) != len(atoi)+1:
             new_imgs.append(img)
+        else:
+            ff.write(str(img['ques_id'])+'\n')
 
     print 'train question number reduce from %d to %d '%(len(imgs), len(new_imgs))
     return new_imgs
@@ -219,6 +221,7 @@ def main(params):
 
     # get the answer encoding.
     A = encode_answer(imgs_train, atoi)
+    MC_ans_train = encode_mc_answer(imgs_train, atoi)
     MC_ans_test = encode_mc_answer(imgs_test, atoi)
 
     # create output h5 file for training set.
@@ -230,6 +233,7 @@ def main(params):
     f.create_dataset("answers", dtype='uint32', data=A)
     f.create_dataset("question_id_train", dtype='uint32', data=question_id_train)
     f.create_dataset("img_pos_train", dtype='uint32', data=img_pos_train)
+    f.create_dataset("MC_ans_train", dtype='uint32', data=MC_ans_train)
     
     f.create_dataset("ques_test", dtype='uint32', data=ques_test)
     f.create_dataset("ques_length_test", dtype='uint32', data=ques_length_test)
