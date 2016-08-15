@@ -10,6 +10,7 @@ require 'hdf5';
 cjson=require('cjson');
 LSTM=require 'misc.LSTM';
 require 'misc.Zigzag';
+require 'misc.Unzigzag';
 require 'rnn';
 
 -------------------------------------------------------------------------------
@@ -201,7 +202,11 @@ elseif opt.netmodel == 'SalMax' then
     multimodal_net=nn.Sequential()
       :add(nn.ParallelTable()
              :add(nn.Identity())
-             :add(netdef.attend(nhimage, grid_height, grid_width)))
+             :add(nn.Sequential()
+                      :add(nn.ConcatTable()
+                               :add(netdef.salient_weight(nhimage))
+                               :add(nn.Identity()))
+                      :add(netdef.attend(nhimage, grid_height, grid_width))))
       :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
       :add(nn.Tanh())
       :add(nn.SpatialMaxPooling(grid_width, grid_height))
@@ -211,7 +216,7 @@ elseif opt.netmodel == 'SalMax' then
 elseif opt.netmodel == 'SalMaxQ' then
     q = nn.Identity()()
     i = nn.Identity()()
-    salient_i = netdef.attend(nhimage, grid_height, grid_width)(i)
+    salient_i = netdef.attend(nhimage, grid_height, grid_width)({netdef.salient_weight(nhimage)(i), i})
     mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)({q, salient_i})
     fusion_fea = nn.Dropout(0.5)(
                    nn.Squeeze()(
