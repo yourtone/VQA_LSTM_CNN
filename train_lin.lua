@@ -33,7 +33,7 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilism|regionmaxQ|regionbilismQ|regionsalient|rsconcat')
+cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilstm|regionmaxQ|regionbilstmQ|regionsalient|rsconcat')
 
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
@@ -212,8 +212,8 @@ elseif opt.netmodel == 'rsconcat' then
                    nn.Squeeze()(
                      nn.SpatialMaxPooling(grid_width, grid_height)(
                        nn.Tanh()(mul_fea))))
-    concat_fea = nn.JoinTable(1, 1)({fusion_fea, q})
-    scores = nn.Linear(common_embedding_size + nhquestion, noutput)(concat_fea)
+    concat_fea = nn.JoinTable(1, 1)({fusion_fea, nn.Linear(nhquestion, common_embedding_size)(q)})
+    scores = nn.Linear(2*common_embedding_size, noutput)(concat_fea)
     multimodal_net = nn.gModule({q, i}, {scores})
 else
   print('ERROR: netmodel is not defined: '..opt.netmodel)
