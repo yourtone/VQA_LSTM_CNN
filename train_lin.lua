@@ -33,7 +33,11 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'regionmax', 'holistic|regionmax|regionbilstm|regionmaxQ|regionbilstmQ|regionsalient|rsconcat')
+cmd:option('-netmodel', 'RegMax', 'holistic|RegMax|RegSpa|SalMax|SalSpa|RegMaxQ|RegSpaQ|SalMaxQ|SalSpaQ')
+-- holistic: baseline (holistic image feature .* question feature)
+-- Reg/Sal: region / saliency Bi-LSTM
+-- Pool/Spa: max pooling / spatial Bi-LSTM
+-- Q: concatenate question
 
 -- Model parameter settings
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
@@ -157,7 +161,7 @@ if opt.netmodel == 'holistic' then
     :add(netdef.AxB(nhquestion,nhimage,common_embedding_size,0.5))
     :add(nn.Dropout(0.5))
     :add(nn.Linear(common_embedding_size,noutput))
-elseif opt.netmodel == 'regionmax' then
+elseif opt.netmodel == 'RegMax' then
 --  multimodal_net=nn.Sequential()
 --    :add(netdef.AxBB(nhquestion,nhimage,opt.num_region,common_embedding_size,0.5))
 --    :add(nn.Dropout(0.5))
@@ -169,7 +173,7 @@ elseif opt.netmodel == 'regionmax' then
     :add(nn.Squeeze())
     :add(nn.Dropout(0.5))
     :add(nn.Linear(common_embedding_size,noutput))
-elseif opt.netmodel == 'regionbilstm' then
+elseif opt.netmodel == 'RegSpa' then
   multimodal_net=nn.Sequential()
     :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
     :add(nn.Tanh())
@@ -193,7 +197,7 @@ elseif opt.netmodel == 'regionbilstm' then
     :add(nn.Squeeze())
     :add(nn.Dropout(0.5))
     :add(nn.Linear(common_embedding_size, noutput))
-elseif opt.netmodel == 'regionsalient' then
+elseif opt.netmodel == 'SalMax' then
     multimodal_net=nn.Sequential()
       :add(nn.ParallelTable()
              :add(nn.Identity())
@@ -204,7 +208,7 @@ elseif opt.netmodel == 'regionsalient' then
       :add(nn.Squeeze())
       :add(nn.Dropout(0.5))
       :add(nn.Linear(common_embedding_size, noutput))
-elseif opt.netmodel == 'rsconcat' then
+elseif opt.netmodel == 'SalMaxQ' then
     q = nn.Identity()()
     i = nn.Identity()()
     salient_i = netdef.attend(nhimage, grid_height, grid_width)(i)
@@ -320,7 +324,7 @@ function JdJ(x)
   end
   embedding_dw_q:zero()
   multimodal_dw:zero()
-  if opt.netmodel == 'regionbilstm' then
+  if opt.netmodel == 'RegSpa' then
     fusion_net:forget()
   end
 
