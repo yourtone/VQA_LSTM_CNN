@@ -235,6 +235,39 @@ elseif opt.netmodel == 'QSalMax' then
                        nn.Tanh()(mul_fea))))
     scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
     multimodal_net = nn.gModule({q, i}, {scores})
+elseif opt.netmodel == 'QSalMax' then
+    q = nn.Identity()()
+    i = nn.Identity()()
+    q_i = nn.JoinTable(1, 3)(
+            {nn.Reshape(nhquestion, grid_height, grid_width)(
+             nn.Replicate(grid_height*grid_width, 2, 1)(q)), i})
+    salient_i = netdef.attend(nhimage, grid_height, grid_width)(
+            {netdef.salient_weight(nhimage+nhquestion)(q_i), i})
+    mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, 
+                            grid_width, common_embedding_size, 0.5)({q, salient_i})
+    fusion_fea = nn.Dropout(0.5)(
+                 nn.Squeeze()(
+                 nn.SpatialMaxPooling(grid_width, grid_height)(
+                 nn.Tanh()(mul_fea))))
+    scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
+    multimodal_net = nn.gModule({q, i}, {scores})
+elseif opt.netmodel == 'SalSpa' then
+    q = nn.Identity()()
+    i = nn.Identity()()
+    salient_i = netdef.attend(nhimage, grid_height, grid_width)(
+        {netdef.salient_weight(nhimage)(i), i})
+    mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, 
+                            common_embedding_size, 0.5)({q, salient_i})
+    fusion_fea = nn.Dropout(0.5)(
+                 nn.Squeeze()(
+                 nn.SpatialMaxPooling(grid_width, grid_height)(
+                 nn.Reshape(common_embedding_size, grid_height, grid_width)(
+                 nn.Transpose({2,3})(
+                 nn.SeqBRNN(common_embedding_size, common_embedding_size, true)(
+                 nn.Transpose({2,3})(
+                 nn.Reshape(common_embedding_size, grid_height*grid_width)(mul_fea))))))))
+    scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
+    multimodal_net = nn.gModule({q, i}, {scores})
 else
   print('ERROR: netmodel is not defined: '..opt.netmodel)
 end
