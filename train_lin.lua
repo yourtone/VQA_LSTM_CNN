@@ -44,7 +44,7 @@ cmd:option('-netmodel', 'RegMax', 'holistic|RegMax|RegSpa|SalMax|SalSpa|RegMaxQ|
 cmd:option('-learning_rate',3e-4,'learning rate for rmsprop')
 cmd:option('-learning_rate_decay_start', -1, 'at what iteration to start decaying learning rate? (-1 = dont)')
 cmd:option('-learning_rate_decay_every', 50000, 'every how many iterations thereafter to drop LR by half?')
-cmd:option('-weightdecay', 5e-4, 'weight decay')
+cmd:option('-weightdecay', 0, 'weight decay, 5e-4')
 cmd:option('-optim_method', 'rmsprop', 'adadelta|rmsprop')
 cmd:option('-batch_size',500,'batch_size for each iterations')
 cmd:option('-max_iters', 50000, 'max number of iterations to run for ')
@@ -139,8 +139,6 @@ collectgarbage();
 ------------------------------------------------------------------------
 print('Building the model...')
 
-buffer_size_q=dataset['question']:size()[2]
-
 --Network definitions
 --VQA
 --embedding: word-embedding
@@ -168,7 +166,7 @@ elseif opt.netmodel == 'RegMax' then
 --    :add(nn.Dropout(0.5))
 --    :add(nn.Linear(common_embedding_size,noutput))
   multimodal_net=nn.Sequential()
-    :add(netdef.Qx2DII(nhquestion,nhimage,grid_height,grid_width,common_embedding_size,0.5))
+    :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
     :add(nn.Tanh())
     :add(nn.SpatialMaxPooling(grid_width,grid_height))
     :add(nn.Squeeze())
@@ -201,12 +199,12 @@ elseif opt.netmodel == 'RegSpa' then
 elseif opt.netmodel == 'SalMax' then
     multimodal_net=nn.Sequential()
       :add(nn.ParallelTable()
-             :add(nn.Identity())
-             :add(nn.Sequential()
-                      :add(nn.ConcatTable()
-                               :add(netdef.salient_weight(nhimage))
-                               :add(nn.Identity()))
-                      :add(netdef.attend(nhimage, grid_height, grid_width))))
+        :add(nn.Identity())
+        :add(nn.Sequential()
+          :add(nn.ConcatTable()
+            :add(netdef.salient_weight(nhimage))
+            :add(nn.Identity()))
+          :add(netdef.attend(nhimage, grid_height, grid_width))))
       :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
       :add(nn.Tanh())
       :add(nn.SpatialMaxPooling(grid_width, grid_height))
@@ -219,9 +217,9 @@ elseif opt.netmodel == 'SalMaxQ' then
     salient_i = netdef.attend(nhimage, grid_height, grid_width)({netdef.salient_weight(nhimage)(i), i})
     mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)({q, salient_i})
     fusion_fea = nn.Dropout(0.5)(
-                   nn.Squeeze()(
-                     nn.SpatialMaxPooling(grid_width, grid_height)(
-                       nn.Tanh()(mul_fea))))
+      nn.Squeeze()(
+        nn.SpatialMaxPooling(grid_width, grid_height)(
+          nn.Tanh()(mul_fea))))
     concat_fea = nn.JoinTable(1, 1)({fusion_fea, nn.Linear(nhquestion, common_embedding_size)(q)})
     scores = nn.Linear(2*common_embedding_size, noutput)(concat_fea)
     multimodal_net = nn.gModule({q, i}, {scores})
@@ -304,6 +302,7 @@ end
 ------------------------------------------------------------------------
 
 -- duplicate the RNN
+buffer_size_q=dataset['question']:size()[2]
 local encoder_net_buffer_q=dupe_rnn(encoder_net_q,buffer_size_q)
 
 -- Objective function

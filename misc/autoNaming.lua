@@ -15,8 +15,8 @@ if opt.subset then
 else
   input_name = string.format('data_prepro_s%d',opt.split)
 end
-local param_name = string.format('lstm_'..input_img_name..'_es%d_rs%d_rl%d_cs%d_bs%d',
-  opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
+local param_name = string.format('lstm_'..input_img_name..'_%s_es%d_rs%d_rl%d_cs%d_bs%d',
+  opt.netmodel,opt.input_encoding_size,opt.rnn_size,opt.rnn_layer,opt.common_embedding_size,opt.batch_size)
 
 if opt.img_norm == 1 then
   input_img_h5 = 'data_img_' .. input_img_name .. 'norm.h5'

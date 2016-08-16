@@ -9,6 +9,7 @@ require 'hdf5';
 LSTM=require 'misc.LSTM';
 cjson=require('cjson');
 require 'misc.Zigzag';
+require 'misc.Unzigzag';
 require 'rnn';
 
 -------------------------------------------------------------------------------
@@ -136,8 +137,10 @@ collectgarbage();
 ------------------------------------------------------------------------
 --Design Parameters and Network Definitions
 ------------------------------------------------------------------------
-buffer_size_q=dataset['question']:size()[2]
+print('Building the model...')
 
+--Network definitions
+--VQA
 --embedding: word-embedding
 embedding_net_q=nn.Sequential()
   :add(nn.Linear(vocabulary_size_q,embedding_size_q))
@@ -196,8 +199,12 @@ elseif opt.netmodel == 'RegSpa' then
 elseif opt.netmodel == 'SalMax' then
     multimodal_net=nn.Sequential()
       :add(nn.ParallelTable()
-             :add(nn.Identity())
-             :add(netdef.attend(nhimage, grid_height, grid_width)))
+        :add(nn.Identity())
+        :add(nn.Sequential()
+          :add(nn.ConcatTable()
+            :add(netdef.salient_weight(nhimage))
+            :add(nn.Identity()))
+          :add(netdef.attend(nhimage, grid_height, grid_width))))
       :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
       :add(nn.Tanh())
       :add(nn.SpatialMaxPooling(grid_width, grid_height))
@@ -207,13 +214,13 @@ elseif opt.netmodel == 'SalMax' then
 elseif opt.netmodel == 'SalMaxQ' then
     q = nn.Identity()()
     i = nn.Identity()()
-    salient_i = netdef.attend(nhimage, grid_height, grid_width)(i)
+    salient_i = netdef.attend(nhimage, grid_height, grid_width)({netdef.salient_weight(nhimage)(i), i})
     mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)({q, salient_i})
     fusion_fea = nn.Dropout(0.5)(
-                   nn.Squeeze()(
-                     nn.SpatialMaxPooling(grid_width, grid_height)(
-                       nn.Tanh()(mul_fea))))
-    concat_fea = nn.JoinTable(1, 1)({fusion_fea, nn.Linear(nhquestion, common_embedding_size, 0.5)(q)})
+      nn.Squeeze()(
+        nn.SpatialMaxPooling(grid_width, grid_height)(
+          nn.Tanh()(mul_fea))))
+    concat_fea = nn.JoinTable(1, 1)({fusion_fea, nn.Linear(nhquestion, common_embedding_size)(q)})
     scores = nn.Linear(2*common_embedding_size, noutput)(concat_fea)
     multimodal_net = nn.gModule({q, i}, {scores})
 else
@@ -304,6 +311,7 @@ end
 ------------------------------------------------------------------------
 -- Evaluation per Iteration
 ------------------------------------------------------------------------
+buffer_size_q=dataset['question']:size()[2]
 if opt.doiter then
   for iter = opt.eval_start_iter, opt.max_iters do
     if iter%opt.save_checkpoint_every == 0 then
