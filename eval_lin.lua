@@ -33,7 +33,7 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'RegMax', 'holistic|RegMax|RegSpa|SalMax|SalSpa|RegMaxQ|RegSpaQ|SalMaxQ|SalSpaQ|QSalMax')
+cmd:option('-netmodel', 'RegMax', 'holistic|RegMax|RegSpa|SalMax|SalSpa|RegMaxQ|RegSpaQ|SalMaxQ|SalSpaQ|QSalMax|ConvMax')
 -- holistic: baseline (holistic image feature .* question feature)
 -- Reg/Sal: region / saliency Bi-LSTM
 -- Pool/Spa: max pooling / spatial Bi-LSTM
@@ -248,6 +248,20 @@ elseif opt.netmodel == 'SalSpa' then
                  nn.SeqBRNN(common_embedding_size, common_embedding_size, true)(
                  nn.Transpose({2,3})(
                  nn.Reshape(common_embedding_size, grid_height*grid_width)(mul_fea))))))))
+    scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
+    multimodal_net = nn.gModule({q, i}, {scores})
+elseif opt.netmodel == 'ConvMax' then
+    q = nn.Identity()()
+    i = nn.Identity()()
+    salient_weight = nn.Reshape(grid_height*grid_width)(
+                     nn.SpatialConvolution(nhimage, 1, 1, 1)(i))
+    salient_i = netdef.attend(nhimage, grid_height, grid_width)(
+        {salient_weight, i})
+    mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)({q, salient_i})
+    fusion_fea = nn.Dropout(0.5)(
+                 nn.Squeeze()(
+                 nn.SpatialMaxPooling(grid_width, grid_height)(
+                 nn.Tanh()(mul_fea))))
     scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
     multimodal_net = nn.gModule({q, i}, {scores})
 else
