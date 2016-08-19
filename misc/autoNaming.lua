@@ -28,4 +28,10 @@ input_ques_h5 = 'data/' .. input_name .. '.h5'
 input_json = 'data/' .. input_name .. '.json'
 CP_name = param_name..'_iter%d.t7'
 final_model_name = param_name..'.t7'
-result_name = param_name..'_results.json'
+local choice
+if opt.dotrain then
+  choice = 'train'
+else
+  choice = 'test'
+end
+result_name = param_name..'_'..choice..'_results.json'

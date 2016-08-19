@@ -226,11 +226,13 @@ elseif opt.netmodel == 'SalMaxQ' then
 elseif opt.netmodel == 'QSalMax' then
     q = nn.Identity()()
     i = nn.Identity()()
-    q_i = nn.JoinTable(1, 3)({nn.Reshape(nhquestion, grid_height, grid_width)(nn.Replicate(grid_height*grid_width, 2, 1)(q)), i})     salient_i = netdef.attend(nhimage, grid_height, grid_width)({netdef.salient_weight(nhimage+nhquestion)(q_i), i})
+    q_i = nn.JoinTable(1, 3)({nn.Reshape(nhquestion, grid_height, grid_width)(nn.Replicate(grid_height*grid_width, 2, 1)(q)), i})
+    salient_i = netdef.attend(nhimage, grid_height, grid_width)({netdef.salient_weight(nhimage+nhquestion)(q_i), i})
     mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)({q, salient_i})
     fusion_fea = nn.Dropout(0.5)(
-                   nn.Squeeze()(                     nn.SpatialMaxPooling(grid_width, grid_height)(
-                       nn.Tanh()(mul_fea))))
+      nn.Squeeze()(
+        nn.SpatialMaxPooling(grid_width, grid_height)(
+          nn.Tanh()(mul_fea))))
     scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
     multimodal_net = nn.gModule({q, i}, {scores})
 else
@@ -362,8 +364,8 @@ if opt.doiter then
       --for i=1,nqs do
       --  table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
       --end
-      --saveJson(opt.out_path .. 'OpenEnded_iter' .. iter .. result_name,response);
-      --print('save results in: '..opt.out_path .. 'OpenEnded_iter' .. iter .. result_name)
+      --saveJson(opt.out_path .. 'OpenEnded_iter' .. iter .. '_' .. result_name,response);
+      --print('save results in: '..opt.out_path .. 'OpenEnded_iter' .. iter .. '_' .. result_name)
 
       mc_response={};
       for i=1,nqs do
@@ -379,8 +381,8 @@ if opt.doiter then
         local tmp,tmp2=torch.max(torch.Tensor(mc_prob), 1);
         table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
       end
-      saveJson(opt.out_path .. 'MultipleChoice_iter' .. iter .. result_name, mc_response);
-      print('save results in: '..opt.out_path .. 'MultipleChoice_iter' .. iter .. result_name)
+      saveJson(opt.out_path .. 'MultipleChoice_iter' .. iter .. '_' .. result_name, mc_response);
+      print('save results in: '..opt.out_path .. 'MultipleChoice_iter' .. iter .. '_' .. result_name)
     end
   end
 end

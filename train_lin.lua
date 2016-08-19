@@ -57,6 +57,7 @@ cmd:option('-img_norm', 1, 'normalize the image feature. 1 = normalize, 0 = not 
 --check point
 cmd:option('-save_checkpoint_every', 1000, 'how often to save a model checkpoint?')
 cmd:option('-checkpoint_path', 'model/', 'folder to save checkpoints')
+cmd:option('-cont_iter', -1, 'continue training from this iteration')
 
 -- misc
 cmd:option('-backend', 'cudnn', 'nn|cudnn')
@@ -230,9 +231,9 @@ elseif opt.netmodel == 'QSalMax' then
     salient_i = netdef.attend(nhimage, grid_height, grid_width)({netdef.salient_weight(nhimage+nhquestion)(q_i), i})
     mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)({q, salient_i})
     fusion_fea = nn.Dropout(0.5)(
-                   nn.Squeeze()(
-                     nn.SpatialMaxPooling(grid_width, grid_height)(
-                       nn.Tanh()(mul_fea))))
+      nn.Squeeze()(
+        nn.SpatialMaxPooling(grid_width, grid_height)(
+          nn.Tanh()(mul_fea))))
     scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
     multimodal_net = nn.gModule({q, i}, {scores})
 else
@@ -258,13 +259,20 @@ end
 
 --Processings
 embedding_w_q,embedding_dw_q=embedding_net_q:getParameters()
-embedding_w_q:uniform(-0.08, 0.08);
-
 encoder_w_q,encoder_dw_q=encoder_net_q:getParameters()
-encoder_w_q:uniform(-0.08, 0.08);
-
 multimodal_w,multimodal_dw=multimodal_net:getParameters()
-multimodal_w:uniform(-0.08, 0.08);
+
+if opt.cont_iter>0 then
+  model_param=torch.load(string.format(opt.checkpoint_path..'save/'..CP_name,opt.cont_iter))
+  embedding_w_q:copy(model_param['embedding_w_q']);
+  encoder_w_q:copy(model_param['encoder_w_q']);
+  multimodal_w:copy(model_param['multimodal_w']);
+  running_avg=model_param['running_avg'];
+else
+  embedding_w_q:uniform(-0.08, 0.08);
+  encoder_w_q:uniform(-0.08, 0.08);
+  multimodal_w:uniform(-0.08, 0.08);
+end
 
 sizes={encoder_w_q:size(1),embedding_w_q:size(1),multimodal_w:size(1)}
 
@@ -394,10 +402,16 @@ end
 
 local state={}
 paths.mkdir(model_path..'save')
-for iter = 1, opt.max_iters do
+local start_iter
+if opt.cont_iter>0 then
+  start_iter = opt.cont_iter
+else
+  start_iter = 1
+end
+for iter = start_iter, opt.max_iters do
   if iter%opt.save_checkpoint_every == 0 then
     torch.save(string.format(model_path..'save/'..CP_name,iter),
-      {encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w})
+      {encoder_w_q=encoder_w_q,embedding_w_q=embedding_w_q,multimodal_w=multimodal_w,running_avg=running_avg})
   end
   if iter%100 == 0 then
     print('training loss: ' .. running_avg, 'on iter: ' .. iter .. '/' .. opt.max_iters)
