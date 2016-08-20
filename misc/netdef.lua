@@ -65,18 +65,22 @@ function netdef.Qx2DII(nhA, nhB, hB, wB, nhcommon, dropout)
     return nn.gModule({q, i}, {output})
 end
 
-local function flat_image_feature()
+local function flat_image_feature(nhimage, gridH, gridW, zigzag)
     local flat_feature = nn.Sequential()
-    flat_feature:add(nn.Zigzag())
-                :add(nn.Transpose({2, 3}))
+    if zigzag then
+        flat_feature:add(nn.Zigzag())
+    else
+        flat_feature:add(nn.Reshape(nhimage, gridH*gridW))
+    end
+    flat_feature:add(nn.Transpose({2, 3}))
     return flat_feature
 end
 
 
-function netdef.salient_weight(nhimage)
+function netdef.salient_weight(nhimage, gridH, gridW, zigzag)
     -- input image feature: bs x nhimage x gridH x gridW, output shape is the same as input.
     local get_weight = nn.Sequential()
-    get_weight:add(flat_image_feature())
+    get_weight:add(flat_image_feature(nhimage, gridH, gridW, zigzag))
               :add(nn.SeqBRNN(nhimage, 1, true))
               :add(nn.Squeeze(2, 2))
               :add(nn.SoftMax())
@@ -84,15 +88,19 @@ function netdef.salient_weight(nhimage)
 end
 
 
-function netdef.attend(nhimage, gridH, gridW) 
+function netdef.attend(nhimage, gridH, gridW, zigzag) 
     -- input: {weights(NxC), image_feature(NxCxHxW))}
     local attend = nn.Sequential()
     attend:add(nn.ParallelTable()
                   :add(nn.Replicate(nhimage, 2, 1))
-                  :add(flat_image_feature()))
+                  :add(flat_image_feature(nhimage, gridH, gridW, zigzag)))
           :add(nn.CMulTable())
           :add(nn.Transpose({2, 3}))
-          :add(nn.Unzigzag(gridH, gridW))
+    if zigzag then
+        attend:add(nn.Unzigzag(gridH, gridW))
+    else
+        attend:add(nn.Reshape(nhimage, gridH, gridW))
+    end
 
     return attend
 end
