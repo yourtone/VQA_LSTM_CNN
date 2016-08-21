@@ -81,13 +81,13 @@ end
 local ndims=4096
 print('DataLoader loading h5 file: ', 'data_train')
 local sz=#train_list
-local feat_train=torch.CudaTensor(sz,9,ndims)
+local feat_train=torch.Tensor(sz,9,ndims)
 print(string.format('processing %d images...',sz))
 for i=1,sz do
     xlua.progress(i, sz)
     local regions=loadim(train_list[i]):cuda()
     net:forward(regions)
-    feat_train[{{i},{},{}}]=net.modules[43].output:clone()
+    feat_train[{{i},{},{}}]=net.modules[43].output:clone():float()
     collectgarbage()
 end
 xlua.progress(sz, sz)
@@ -100,13 +100,13 @@ collectgarbage()
 
 print('DataLoader loading h5 file: ', 'data_test')
 local sz=#test_list
-local feat_test=torch.CudaTensor(sz,9,ndims)
+local feat_test=torch.Tensor(sz,9,ndims)
 print(string.format('processing %d images...',sz))
 for i=1,sz do
     xlua.progress(i, sz)    
     local regions=loadim(test_list[i]):cuda()
     net:forward(regions)
-    feat_test[{{i},{},{}}]=net.modules[43].output:clone()
+    feat_test[{{i},{},{}}]=net.modules[43].output:clone():float()
     collectgarbage()
 end
 xlua.progress(sz, sz)

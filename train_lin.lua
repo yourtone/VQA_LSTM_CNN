@@ -34,7 +34,7 @@ cmd:option('-layer', 43, 'layer number')
 cmd:option('-imdim', 4096, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'RegMax', 'holistic|RegMax|RegSpa|SalMax|SalSpa|RegMaxQ|RegSpaQ|SalMaxQ|SalSpaQ|QSalMax')
+cmd:option('-netmodel', 'RegMax', 'holistic|RegMax|RegSpa|SalMax|SalSpa|RegMaxQ|RegSpaQ|SalMaxQ|SalSpaQ|QSalMax|ConvMax')
 -- holistic: baseline (holistic image feature .* question feature)
 -- Reg/Sal: region / saliency Bi-LSTM
 -- Pool/Spa: max pooling / spatial Bi-LSTM
@@ -53,6 +53,7 @@ cmd:option('-rnn_size',512,'size of the rnn in number of hidden nodes in each la
 cmd:option('-rnn_layer',2,'number of the rnn layer')
 cmd:option('-common_embedding_size', 1024, 'size of the common embedding vector')
 cmd:option('-img_norm', 1, 'normalize the image feature. 1 = normalize, 0 = not normalize')
+cmd:option('-zigzag', false, 'use Zigzag to arrange image patch')
 
 --check point
 cmd:option('-save_checkpoint_every', 1000, 'how often to save a model checkpoint?')
@@ -203,9 +204,9 @@ elseif opt.netmodel == 'SalMax' then
         :add(nn.Identity())
         :add(nn.Sequential()
           :add(nn.ConcatTable()
-            :add(netdef.salient_weight(nhimage))
+            :add(netdef.salient_weight(nhimage, grid_height, grid_width, opt.zigzag))
             :add(nn.Identity()))
-          :add(netdef.attend(nhimage, grid_height, grid_width))))
+          :add(netdef.attend(nhimage, grid_height, grid_width, opt.zigzag))))
       :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))
       :add(nn.Tanh())
       :add(nn.SpatialMaxPooling(grid_width, grid_height))
@@ -215,25 +216,62 @@ elseif opt.netmodel == 'SalMax' then
 elseif opt.netmodel == 'SalMaxQ' then
     q = nn.Identity()()
     i = nn.Identity()()
-    salient_i = netdef.attend(nhimage, grid_height, grid_width)({netdef.salient_weight(nhimage)(i), i})
-    mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)({q, salient_i})
+    salient_i = netdef.attend(nhimage, grid_height, grid_width, opt.zigzag)(
+        {netdef.salient_weight(nhimage, grid_height, grid_width, opt.zigzag)(i), i})
+    mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)(
+        {q, salient_i})
     fusion_fea = nn.Dropout(0.5)(
-      nn.Squeeze()(
-        nn.SpatialMaxPooling(grid_width, grid_height)(
-          nn.Tanh()(mul_fea))))
+                 nn.Squeeze()(
+                 nn.SpatialMaxPooling(grid_width, grid_height)(
+                 nn.Tanh()(mul_fea))))
     concat_fea = nn.JoinTable(1, 1)({fusion_fea, nn.Linear(nhquestion, common_embedding_size)(q)})
     scores = nn.Linear(2*common_embedding_size, noutput)(concat_fea)
     multimodal_net = nn.gModule({q, i}, {scores})
 elseif opt.netmodel == 'QSalMax' then
     q = nn.Identity()()
     i = nn.Identity()()
-    q_i = nn.JoinTable(1, 3)({nn.Reshape(nhquestion, grid_height, grid_width)(nn.Replicate(grid_height*grid_width, 2, 1)(q)), i})
-    salient_i = netdef.attend(nhimage, grid_height, grid_width)({netdef.salient_weight(nhimage+nhquestion)(q_i), i})
+    q_i = nn.JoinTable(1, 3)(
+            {nn.Reshape(nhquestion, grid_height, grid_width)(
+             nn.Replicate(grid_height*grid_width, 2, 1)(q)), i})
+    salient_i = netdef.attend(nhimage, grid_height, grid_width, opt.zigzag)(
+            {netdef.salient_weight(nhimage+nhquestion, grid_height, grid_width, opt.zigzag)(q_i), i})
+    mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, 
+                            grid_width, common_embedding_size, 0.5)({q, salient_i})
+    fusion_fea = nn.Dropout(0.5)(
+                 nn.Squeeze()(
+                 nn.SpatialMaxPooling(grid_width, grid_height)(
+                 nn.Tanh()(mul_fea))))
+    scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
+    multimodal_net = nn.gModule({q, i}, {scores})
+elseif opt.netmodel == 'SalSpa' then
+    q = nn.Identity()()
+    i = nn.Identity()()
+    salient_i = netdef.attend(nhimage, grid_height, grid_width, opt.zigzag)(
+        {netdef.salient_weight(nhimage, grid_height, grid_width, opt.zigzag)(i), i})
+    mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, 
+                            common_embedding_size, 0.5)({q, salient_i})
+    fusion_fea = nn.Dropout(0.5)(
+                 nn.Squeeze()(
+                 nn.SpatialMaxPooling(grid_width, grid_height)(
+                 nn.Reshape(common_embedding_size, grid_height, grid_width)(
+                 nn.Transpose({2,3})(
+                 nn.SeqBRNN(common_embedding_size, common_embedding_size, true)(
+                 nn.Transpose({2,3})(
+                 nn.Reshape(common_embedding_size, grid_height*grid_width)(mul_fea))))))))
+    scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
+    multimodal_net = nn.gModule({q, i}, {scores})
+elseif opt.netmodel == 'ConvMax' then
+    q = nn.Identity()()
+    i = nn.Identity()()
+    salient_weight = nn.Reshape(grid_height*grid_width)(
+                     nn.SpatialConvolution(nhimage, 1, 1, 1)(i))
+    salient_i = netdef.attend(nhimage, grid_height, grid_width, opt.zigzag)(
+        {salient_weight, i})
     mul_fea = netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5)({q, salient_i})
     fusion_fea = nn.Dropout(0.5)(
-      nn.Squeeze()(
-        nn.SpatialMaxPooling(grid_width, grid_height)(
-          nn.Tanh()(mul_fea))))
+                 nn.Squeeze()(
+                 nn.SpatialMaxPooling(grid_width, grid_height)(
+                 nn.Tanh()(mul_fea))))
     scores = nn.Linear(common_embedding_size, noutput)(fusion_fea)
     multimodal_net = nn.gModule({q, i}, {scores})
 else
