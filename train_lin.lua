@@ -172,8 +172,8 @@ elseif opt.netmodel == 'RegMax' then
     :add(nn.Tanh())
     :add(nn.SpatialMaxPooling(grid_width,grid_height))
     :add(nn.Squeeze())
-    :add(nn.Dropout(0.5))
     :add(nn.Linear(common_embedding_size,noutput))
+    :add(nn.Dropout(0.5))
 elseif opt.netmodel == 'RegSpa' then
   multimodal_net=nn.Sequential()
     :add(netdef.Qx2DII(nhquestion, nhimage, grid_height, grid_width, common_embedding_size, 0.5))

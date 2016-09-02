@@ -28,12 +28,12 @@ cmd:option('-conf_file', '', 'configuration file path')
 cmd:option('-subset', false, 'true: use subset, false: use all dataset')
 cmd:option('-split', 1, '1: train on Train and test on Val, 2: train on Tr+V and test on Te, 3: train on Tr+V and test on Te-dev')
 cmd:option('-num_output', 1000, 'number of output answers')
-cmd:option('-CNNmodel', 'VGG19R', 'CNN model')
-cmd:option('-layer', 43, 'layer number')
-cmd:option('-imdim', 4096, 'image feature dimension')
+cmd:option('-CNNmodel', 'ResNet152', 'CNN model')
+cmd:option('-layer', 10, 'layer number')
+cmd:option('-imdim', 2048, 'image feature dimension')
 cmd:option('-num_region_width', 3, 'number of image regions in the side of width')
 cmd:option('-num_region_height', 3, 'number of image regions in the side of heigth')
-cmd:option('-netmodel', 'RegMax', 'holistic|RegMax|RegSpa|SalMax|SalSpa|RegMaxQ|RegSpaQ|SalMaxQ|SalSpaQ|QSalMax|ConvMax')
+cmd:option('-netmodel', 'SalMax', 'holistic|RegMax|RegSpa|SalMax|SalSpa|RegMaxQ|RegSpaQ|SalMaxQ|SalSpaQ|QSalMax|ConvMax')
 -- holistic: baseline (holistic image feature .* question feature)
 -- Reg/Sal: region / saliency Bi-LSTM
 -- Pool/Spa: max pooling / spatial Bi-LSTM
@@ -335,6 +335,8 @@ function forward(s,e)
   --multimodal forward--
   local tv_q=states_q[question_max_length+1]:index(1,fv_sorted_q[4]);
   local scores=multimodal_net:forward({tv_q,fv_im});
+  weights = multimodal_net.modules[1].modules[2].modules[1].modules[1].output
+  print(weights)
   if opt.netmodel == 'RegSpa' then
     fusion_net:forget()
   end
@@ -386,37 +388,38 @@ if opt.doiter then
       nqs=dataset['question']:size(1);
       scores=torch.Tensor(nqs,noutput);
       qids=torch.LongTensor(nqs);
-      for i=1,nqs,batch_size do
-        xlua.progress(i, nqs)
+      --for i=1,nqs,batch_size do
+      i=torch.random(nqs-batch_size)
+        --xlua.progress(i, nqs)
         r=math.min(i+batch_size-1,nqs);
         scores[{{i,r},{}}],qids[{{i,r}}]=forward(i,r);
-      end
-      xlua.progress(nqs, nqs)
-      tmp,pred=torch.max(scores,2);
+      --end
+      --xlua.progress(nqs, nqs)
+      --tmp,pred=torch.max(scores,2);
 
-      response={};
-      for i=1,nqs do
-        table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
-      end
-      saveJson(opt.out_path .. 'OpenEnded_iter' .. iter .. '_' .. result_name,response);
-      print('save results in: '..opt.out_path .. 'OpenEnded_iter' .. iter .. '_' .. result_name)
+      --response={};
+      --for i=1,nqs do
+      --  table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
+      --end
+      --saveJson(opt.out_path .. 'OpenEnded_iter' .. iter .. '_' .. result_name,response);
+      --print('save results in: '..opt.out_path .. 'OpenEnded_iter' .. iter .. '_' .. result_name)
 
-      mc_response={};
-      for i=1,nqs do
-        local mc_prob = {}
-        local mc_idx = dataset['MC_ans_'..choice][i]
-        local tmp_idx = {}
-        for j=1, mc_idx:size()[1] do
-          if mc_idx[j] ~= 0 then
-            table.insert(mc_prob, scores[{i, mc_idx[j]}])
-            table.insert(tmp_idx, mc_idx[j])
-          end
-        end
-        local tmp,tmp2=torch.max(torch.Tensor(mc_prob), 1);
-        table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
-      end
-      saveJson(opt.out_path .. 'MultipleChoice_iter' .. iter .. '_' .. result_name, mc_response);
-      print('save results in: '..opt.out_path .. 'MultipleChoice_iter' .. iter .. '_' .. result_name)
+--      mc_response={};
+--      for i=1,nqs do
+--        local mc_prob = {}
+--        local mc_idx = dataset['MC_ans_'..choice][i]
+--        local tmp_idx = {}
+--        for j=1, mc_idx:size()[1] do
+--          if mc_idx[j] ~= 0 then
+--            table.insert(mc_prob, scores[{i, mc_idx[j]}])
+--            table.insert(tmp_idx, mc_idx[j])
+--          end
+--        end
+--        local tmp,tmp2=torch.max(torch.Tensor(mc_prob), 1);
+--        table.insert(mc_response, {question_id=qids[i],answer=json_file['ix_to_ans'][tostring(tmp_idx[tmp2[1]])]})
+--      end
+--      saveJson(opt.out_path .. 'MultipleChoice_iter' .. iter .. '_' .. result_name, mc_response);
+--      print('save results in: '..opt.out_path .. 'MultipleChoice_iter' .. iter .. '_' .. result_name)
     end
   end
 end
@@ -460,13 +463,13 @@ if opt.dofinal then
   xlua.progress(nqs, nqs)
   tmp,pred=torch.max(scores,2);
 
-  response={};
-  for i=1,nqs do
-    table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
-  end
-  paths.mkdir(opt.out_path)
-  saveJson(opt.out_path .. 'OpenEnded_' .. result_name,response);
-  print('save results in: '..opt.out_path .. 'OpenEnded_' .. result_name)
+  --response={};
+  --for i=1,nqs do
+  --  table.insert(response,{question_id=qids[i],answer=json_file['ix_to_ans'][tostring(pred[{i,1}])]})
+  --end
+  --paths.mkdir(opt.out_path)
+  --saveJson(opt.out_path .. 'OpenEnded_' .. result_name,response);
+  --print('save results in: '..opt.out_path .. 'OpenEnded_' .. result_name)
 
   mc_response={};
   for i=1,nqs do

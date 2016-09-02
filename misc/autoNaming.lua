@@ -4,7 +4,7 @@ if opt.CNNmodel == 'VGG19' then
   input_img_name = string.format('s%d_%s_l%d_d%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim)
 elseif opt.CNNmodel == 'GoogLeNet' then
   input_img_name = string.format('s%d_%s_d%d',opt.split,opt.CNNmodel,opt.imdim)
-elseif opt.CNNmodel == 'VGG16' or opt.CNNmodel == 'VGG19R' then
+elseif opt.CNNmodel == 'VGG16' or opt.CNNmodel == 'VGG19R' or opt.CNNmodel == 'ResNet152' then
   input_img_name = string.format('s%d_%s_l%d_d%dx%dx%d',opt.split,opt.CNNmodel,opt.layer,opt.imdim,opt.num_region_height,opt.num_region_width)
 else
   print('CNN model name error')
