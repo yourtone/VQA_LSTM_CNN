@@ -1,8 +1,19 @@
-# Deeper LSTM+ normalized CNN for Visual Question Answering
+# Task-driven Visual Saliency and Attention-based Visual Question Answering
 
-Train a deeper LSTM and normalized CNN Visual Question Answering model. This current code can get **58.16** on Open-Ended and **63.09** on Multiple-Choice on **test-standard** split. You can check [Codalab leaderboard](https://competitions.codalab.org/competitions/6961#results) for more details.
+Basing on the baseline code of **Deeper LSTM+ normalized CNN for Visual Question Answering** ([VQA_LSTM_CNN](https://github.com/GT-Vision-Lab/VQA_LSTM_CNN)), we use the task-driven visual saliency and a novel attention-based model (without model assembling) to achieve **58.97** on Open-Ended and **63.69** on Multiple-Choice on **test-dev** split, **59.26** on Open-Ended and **63.99** on Multiple-Choice on **test-standard** split of [VQA v1.0](http://visualqa.org/)
 
-### My own running examples
+### Reference
+
+```
+@article{lin2017task,
+  title={Task-driven Visual Saliency and Attention-based Visual Question Answering},
+  author={Lin, Yuetan and Pang, Zhangyang and Wang, Donghui and Zhuang, Yueting},
+  journal={arXiv preprint arXiv:1702.06700},
+  year={2017}
+}
+```
+
+### Our running examples
 
 * preprocess data to raw data :shipit:
 
@@ -333,6 +344,10 @@ other : 42.02
 number : 32.88
 yes/no : 75.28
 ```
+
+# Deeper LSTM+ normalized CNN for Visual Question Answering
+
+Train a deeper LSTM and normalized CNN Visual Question Answering model. This current code can get **58.16** on Open-Ended and **63.09** on Multiple-Choice on **test-standard** split. You can check [Codalab leaderboard](https://competitions.codalab.org/competitions/6961#results) for more details.
 
 ### Requirements
 
